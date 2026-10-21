@@ -53,6 +53,21 @@ class PrendreRendezVous extends Component
         $this->heureDebut = $heure;
     }
 
+    /**
+     * Messages métier attendus (règles de réservation existantes).
+     * Seuls ces messages sont montrés au patient ; toute autre exception
+     * (erreur technique) est journalisée et remplacée par un message générique.
+     *
+     * @return array<int, string>
+     */
+    private function messagesMetier(): array
+    {
+        return [
+            "Cette date dépasse l'horizon de réservation.",
+            "Ce créneau n'est plus disponible.",
+        ];
+    }
+
     public function reserver(ReservationService $reservationService): void
     {
         $this->validate([
@@ -80,7 +95,11 @@ class PrendreRendezVous extends Component
             $this->heureDebut = null;
             $this->resetValidation();
         } catch (\Exception $e) {
-            $this->messageErreur = $e->getMessage();
+            report($e);
+
+            $this->messageErreur = in_array($e->getMessage(), $this->messagesMetier(), true)
+                ? $e->getMessage()
+                : 'Une erreur est survenue lors de la demande de rendez-vous. Veuillez réessayer.';
         }
     }
 

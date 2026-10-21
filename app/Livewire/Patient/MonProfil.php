@@ -43,6 +43,7 @@ class MonProfil extends Component
 
             $this->messageSucces = 'Profil mis à jour.';
         } catch (\Exception $e) {
+            report($e);
             $this->messageErreur = 'Erreur lors de la mise à jour.';
         }
     }
@@ -72,6 +73,7 @@ class MonProfil extends Component
             $this->password_confirmation = '';
             $this->messageSucces = 'Mot de passe modifié.';
         } catch (\Exception $e) {
+            report($e);
             $this->messageErreur = 'Erreur lors du changement de mot de passe.';
         }
     }

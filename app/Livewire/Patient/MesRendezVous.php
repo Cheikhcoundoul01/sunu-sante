@@ -105,7 +105,8 @@ class MesRendezVous extends Component
             $this->messageSucces = 'Rendez-vous modifié. Il repasse en attente de validation.';
             $this->annulerModification();
         } catch (\Exception $e) {
-            $this->messageErreur = $e->getMessage();
+            report($e);
+            $this->messageErreur = 'Impossible de modifier ce rendez-vous.';
         }
     }
 
@@ -123,7 +124,8 @@ class MesRendezVous extends Component
             $reservationService->annuler($rdv, auth()->user());
             $this->messageSucces = 'Rendez-vous annulé. Le créneau est libéré.';
         } catch (\Exception $e) {
-            $this->messageErreur = $e->getMessage();
+            report($e);
+            $this->messageErreur = 'Impossible d\'annuler ce rendez-vous.';
         }
     }
 

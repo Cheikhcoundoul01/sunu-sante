@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Mail;
 
+use App\Mail\ComptePatientRejete;
 use App\Mail\ComptePatientValide;
 use App\Mail\RendezVousAnnule;
 use App\Mail\RendezVousModifie;
@@ -70,7 +71,6 @@ class EmailRenderingTest extends TestCase
         $this->assertStringContainsString('lang="fr"', $html);
         $this->assertStringContainsString('src="data:image/png;base64,', $html);
         $this->assertStringContainsString('alt="Sunu Santé"', $html);
-        $this->assertStringContainsString('#0F766E', $html);
         $this->assertStringContainsString('#115E59', $html);
         $this->assertStringContainsString('#F0FDFA', $html);
         $this->assertStringContainsString('Merci de votre confiance.', $html);
@@ -102,6 +102,7 @@ class EmailRenderingTest extends TestCase
         $mailable = new ComptePatientValide($patient);
         $html = $mailable->render();
         $this->assertHtmlCommon($html);
+        $this->assertStringContainsString('#0F766E', $html);
         $this->assertStringContainsString('Votre compte patient est validé', $html);
         $this->assertStringContainsString($patient->name, $html);
 
@@ -113,6 +114,27 @@ class EmailRenderingTest extends TestCase
         $this->assertSame('Sunu Santé — Votre compte patient est validé', $mailable->envelope()->subject);
     }
 
+    public function test_compte_patient_rejete_html_and_text_rendering(): void
+    {
+        $patient = $this->patient();
+
+        $mailable = new ComptePatientRejete($patient);
+        $html = $mailable->render();
+        $this->assertHtmlCommon($html);
+        $this->assertStringContainsString('#B45309', $html);
+        $this->assertStringContainsString('Votre demande de compte patient', $html);
+        $this->assertStringContainsString("n'a pas été acceptée", $html);
+        $this->assertStringContainsString($patient->name, $html);
+
+        $this->assertSame('mail.compte-patient-rejete-text', $mailable->textView);
+        $text = view($mailable->textView, $mailable->buildViewData())->render();
+        $this->assertTextCommon($text);
+        $this->assertStringContainsString("n'a pas été acceptée", $text);
+        $this->assertStringContainsString($patient->name, $text);
+
+        $this->assertSame('Sunu Santé — Votre demande de compte patient', $mailable->envelope()->subject);
+    }
+
     public function test_rendez_vous_valide_html_and_text_rendering(): void
     {
         [$rdv, $medecin, $patient] = $this->rendezVous();
@@ -120,6 +142,7 @@ class EmailRenderingTest extends TestCase
         $mailable = new RendezVousValide($rdv);
         $html = $mailable->render();
         $this->assertHtmlCommon($html);
+        $this->assertStringContainsString('#0F766E', $html);
         $this->assertStringContainsString('Votre rendez-vous a été confirmé', $html);
         $this->assertStringContainsString($patient->name, $html);
         $this->assertStringContainsString($medecin->name, $html);
@@ -144,6 +167,7 @@ class EmailRenderingTest extends TestCase
         $mailable = new RendezVousModifie($rdv);
         $html = $mailable->render();
         $this->assertHtmlCommon($html);
+        $this->assertStringContainsString('#0F766E', $html);
         $this->assertStringContainsString('Votre demande de rendez-vous a été modifiée', $html);
         $this->assertStringContainsString($patient->name, $html);
         $this->assertStringContainsString($medecin->name, $html);
@@ -166,6 +190,7 @@ class EmailRenderingTest extends TestCase
         $mailable = new RendezVousAnnule($rdv);
         $html = $mailable->render();
         $this->assertHtmlCommon($html);
+        $this->assertStringContainsString('#B45309', $html);
         $this->assertStringContainsString('Votre rendez-vous a été annulé', $html);
         $this->assertStringContainsString($patient->name, $html);
         $this->assertStringContainsString($medecin->name, $html);

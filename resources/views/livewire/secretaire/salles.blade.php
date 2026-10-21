@@ -22,35 +22,37 @@
             <h2 class="mt-3 text-lg font-medium text-slate-900">Aucune salle</h2>
             <p class="mt-1 text-sm text-slate-600">Ajoutez votre première salle d'intervention.</p>
         </x-card>
-    @else
-        {{-- Formulaire ajout salle --}}
-        <x-card class="mt-6 p-4">
-            <h2 class="text-lg font-medium text-slate-900">Ajouter une salle</h2>
-            <form wire:submit.prevent="ajouterSalle" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                    <x-label for="nom">Nom de la salle</x-label>
-                    <input type="text" id="nom" wire:model="nom" class="mt-1 block w-full" required maxlength="100" placeholder="Ex: Bloc opératoire 1">
-                    @error('nom') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-                <div class="sm:col-span-2">
-                    <x-label for="description">Description (optionnel)</x-label>
-                    <textarea id="description" wire:model="description" rows="2" class="mt-1 block w-full" placeholder="Ex: Salle de chirurgie cardiaque..."></textarea>
-                    @error('description') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-                <div class="flex items-end">
-                    <label class="flex items-center gap-2 text-sm">
-                        <input type="checkbox" wire:model="active" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500" checked>
-                        Active
-                    </label>
-                </div>
-                <div class="sm:col-span-3">
-                    <button type="submit" wire:loading.attr="disabled" class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50">
-                        Ajouter la salle
-                    </button>
-                </div>
-            </form>
-        </x-card>
+    @endif
 
+    {{-- Formulaire ajout salle --}}
+    <x-card class="mt-6 p-4">
+        <h2 class="text-lg font-medium text-slate-900">Ajouter une salle</h2>
+        <form wire:submit.prevent="ajouterSalle" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+                <x-label for="nom">Nom de la salle</x-label>
+                <input type="text" id="nom" wire:model="nom" class="mt-1 block w-full" required maxlength="100" placeholder="Ex: Bloc opératoire 1">
+                @error('nom') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+            </div>
+            <div class="sm:col-span-2">
+                <x-label for="description">Description (optionnel)</x-label>
+                <textarea id="description" wire:model="description" rows="2" class="mt-1 block w-full" placeholder="Ex: Salle de chirurgie cardiaque..."></textarea>
+                @error('description') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+            </div>
+            <div class="flex items-end">
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" wire:model="active" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500" checked>
+                    Active
+                </label>
+            </div>
+            <div class="sm:col-span-3">
+                <button type="submit" wire:loading.attr="disabled" class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50">
+                    Ajouter la salle
+                </button>
+            </div>
+        </form>
+    </x-card>
+
+    @if (! $salles->isEmpty())
         {{-- Liste des salles --}}
         <div class="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <table class="min-w-full divide-y divide-slate-200">

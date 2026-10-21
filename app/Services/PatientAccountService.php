@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\DossierDejaTraiteException;
+use App\Mail\ComptePatientRejete;
 use App\Mail\ComptePatientValide;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -66,9 +67,21 @@ class PatientAccountService
                     ? 'Validation du compte patient'
                     : 'Rejet du compte patient');
 
-            // V1 : email envoyé uniquement à la validation du compte patient.
+            // V1 : un email est envoyé lors de la validation et lors du rejet
+            // du compte patient. L'échec d'envoi est journalisé mais ne doit pas
+            // faire échouer la décision métier, qui est définitive (AGENTS.md §6).
             if ($nouveauStatut === 'Actif') {
-                Mail::to($dossier->email)->send(new ComptePatientValide($dossier));
+                try {
+                    Mail::to($dossier->email)->send(new ComptePatientValide($dossier));
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            } else {
+                try {
+                    Mail::to($dossier->email)->send(new ComptePatientRejete($dossier));
+                } catch (\Throwable $e) {
+                    report($e);
+                }
             }
 
             return $dossier;

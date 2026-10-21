@@ -6,6 +6,7 @@ use App\Mail\RendezVousAnnule;
 use App\Mail\RendezVousValide;
 use App\Models\RendezVous;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -49,19 +50,30 @@ class RendezVousSecretaire extends Component
         }
 
         try {
-            $rdv->update(['statut' => RendezVous::STATUT_VALIDE]);
+            DB::transaction(function () use ($rdv) {
+                $rdv->update(['statut' => RendezVous::STATUT_VALIDE]);
 
-            activity()
-                ->causedBy(auth()->user())
-                ->performedOn($rdv)
-                ->event('validation_rendez_vous')
-                ->log('Rendez-vous validé par la secrétaire');
+                activity()
+                    ->causedBy(auth()->user())
+                    ->performedOn($rdv)
+                    ->event('validation_rendez_vous')
+                    ->log('Rendez-vous validé par la secrétaire');
+            });
+        } catch (\Throwable $e) {
+            report($e);
+            $this->messageErreur = 'Une erreur inattendue est survenue lors de la validation du rendez-vous.';
+            return;
+        }
 
+        $this->messageSucces = 'Rendez-vous validé.';
+
+        try {
             Mail::to($rdv->patient->email)->send(new RendezVousValide($rdv->fresh()));
-
             $this->messageSucces = 'Rendez-vous validé. Email de confirmation envoyé au patient.';
-        } catch (\Exception $e) {
-            $this->messageErreur = 'Erreur lors de la validation.';
+        } catch (\Throwable $e) {
+            report($e);
+            $this->messageSucces = null;
+            $this->messageErreur = 'Rendez-vous validé, mais l\'envoi de l\'email de confirmation a échoué.';
         }
     }
 
@@ -87,19 +99,30 @@ class RendezVousSecretaire extends Component
         }
 
         try {
-            $rdv->update(['statut' => RendezVous::STATUT_ANNULE]);
+            DB::transaction(function () use ($rdv) {
+                $rdv->update(['statut' => RendezVous::STATUT_ANNULE]);
 
-            activity()
-                ->causedBy(auth()->user())
-                ->performedOn($rdv)
-                ->event('rejet_rendez_vous')
-                ->log('Rendez-vous rejeté par la secrétaire');
+                activity()
+                    ->causedBy(auth()->user())
+                    ->performedOn($rdv)
+                    ->event('rejet_rendez_vous')
+                    ->log('Rendez-vous rejeté par la secrétaire');
+            });
+        } catch (\Throwable $e) {
+            report($e);
+            $this->messageErreur = 'Une erreur inattendue est survenue lors du rejet de la demande de rendez-vous.';
+            return;
+        }
 
+        $this->messageSucces = 'Demande de rendez-vous rejetée. Le créneau est libéré.';
+
+        try {
             Mail::to($rdv->patient->email)->send(new RendezVousAnnule($rdv->fresh()));
-
             $this->messageSucces = 'Demande de rendez-vous rejetée. Le créneau est libéré. Email envoyé au patient.';
-        } catch (\Exception $e) {
-            $this->messageErreur = 'Erreur lors du rejet.';
+        } catch (\Throwable $e) {
+            report($e);
+            $this->messageSucces = null;
+            $this->messageErreur = 'Demande rejetée et créneau libéré, mais l\'envoi de l\'email au patient a échoué.';
         }
     }
 

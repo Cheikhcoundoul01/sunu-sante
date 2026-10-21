@@ -4,6 +4,7 @@ namespace Tests\Feature\Secretaire;
 
 use App\Exceptions\DossierDejaTraiteException;
 use App\Livewire\Secretaire\Patients;
+use App\Mail\ComptePatientRejete;
 use App\Mail\ComptePatientValide;
 use App\Models\User;
 use App\Services\PatientAccountService;
@@ -94,7 +95,7 @@ class PatientValidationTest extends TestCase
         ]);
     }
 
-    public function test_rejection_records_decision_logs_and_sends_no_email(): void
+    public function test_rejection_records_decision_logs_and_sends_email(): void
     {
         Mail::fake();
 
@@ -110,7 +111,12 @@ class PatientValidationTest extends TestCase
         $this->assertSame('Rejeté', $patient->statut_compte);
         $this->assertSame($secretaire->id, $patient->traite_par_id);
 
-        Mail::assertNothingSent();
+        Mail::assertSent(ComptePatientRejete::class, function ($mail) use ($patient) {
+            return $mail->hasTo($patient->email)
+                && $mail->hasSubject('Sunu Santé — Votre demande de compte patient');
+        });
+
+        Mail::assertNotSent(ComptePatientValide::class);
 
         $this->assertDatabaseHas('activity_log', [
             'event' => 'rejet_compte_patient',
@@ -133,7 +139,7 @@ class PatientValidationTest extends TestCase
         app(PatientAccountService::class)->rejeter($patient->fresh(), $secretaire);
     }
 
-    public function test_second_decision_keeps_first_and_shows_already_processed(): void
+    public function test_second_decision_keeps_first_shows_already_processed_and_sends_no_second_email(): void
     {
         Mail::fake();
 
@@ -153,6 +159,9 @@ class PatientValidationTest extends TestCase
 
         $this->assertSame('Actif', $patient->statut_compte);
         $this->assertDatabaseCount('activity_log', 1);
+
+        Mail::assertSentCount(1);
+        Mail::assertNotSent(ComptePatientRejete::class);
     }
 
     public function test_only_one_activity_is_logged_per_decision(): void
@@ -164,6 +173,26 @@ class PatientValidationTest extends TestCase
 
         app(PatientAccountService::class)->valider($patient, $secretaire);
 
+        $this->assertDatabaseCount('activity_log', 1);
+    }
+
+    public function test_rejection_email_failure_does_not_revert_decision(): void
+    {
+        $secretaire = $this->secretaire();
+        $patient = $this->patientEnAttente();
+
+        Mail::shouldReceive('to->send')->once()->andThrow(new \RuntimeException('SMTP indisponible'));
+
+        $resultat = app(PatientAccountService::class)->rejeter($patient, $secretaire);
+
+        $this->assertSame('Rejeté', $resultat->statut_compte);
+
+        $patient->refresh();
+
+        $this->assertSame('Rejeté', $patient->statut_compte);
+        $this->assertNotSame('En attente', $patient->statut_compte);
+        $this->assertSame($secretaire->id, $patient->traite_par_id);
+        $this->assertNotNull($patient->traite_at);
         $this->assertDatabaseCount('activity_log', 1);
     }
 }

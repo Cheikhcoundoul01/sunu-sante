@@ -27,6 +27,45 @@ class RendezVousSecretaireTest extends TestCase
         $this->seed(RolePermissionSeeder::class);
     }
 
+    /**
+     * Événement du modèle RendezVous sur lequel les tests d'échec métier
+     * enregistrent un écouteur temporaire.
+     */
+    private function cleEvenementMiseAJourRendezVous(): string
+    {
+        return 'eloquent.updating: ' . RendezVous::class;
+    }
+
+    /**
+     * Enregistre un écouteur temporaire qui fait échouer la mise à jour du
+     * rendez-vous, exécute le test, puis retire uniquement cet écouteur.
+     *
+     * Le retrait est ciblé sur la seule clé d'événement utilisée : aucun autre
+     * écouteur ni wildcard n'est touché, et le nettoyage a lieu même si une
+     * assertion échoue (grâce au `finally`).
+     */
+    private function simulerEchecMiseAJour(callable $test): void
+    {
+        $cle = $this->cleEvenementMiseAJourRendezVous();
+        $dispatcher = RendezVous::getEventDispatcher();
+
+        $this->assertCount(
+            0,
+            $dispatcher->getListeners($cle),
+            'Un écouteur préexistant a été détecté sur ' . $cle . ' : nettoyage ciblé impossible sans le supprimer.'
+        );
+
+        RendezVous::updating(function () {
+            throw new \RuntimeException('Échec de la mise à jour du statut');
+        });
+
+        try {
+            $test();
+        } finally {
+            $dispatcher->forget($cle);
+        }
+    }
+
     protected function service(string $nom): Service
     {
         return Service::create(['nom' => $nom, 'actif' => true]);
@@ -426,5 +465,213 @@ class RendezVousSecretaireTest extends TestCase
             ->set('search', 'Awa')
             ->assertSee('Awa Diop')
             ->assertDontSee('Moussa Diallo');
+    }
+
+    protected function rdvDemande(User $patient, User $medecin, Service $service): RendezVous
+    {
+        $jour = Carbon::now()->addDay()->toDateString();
+        $this->disponibilite($medecin->id, $service->id, $jour, '09:00', '12:00');
+
+        return RendezVous::create([
+            'patient_id' => $patient->id,
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'date' => $jour,
+            'heure_debut' => '09:30',
+            'duree_prevue' => 30,
+            'statut' => RendezVous::STATUT_DEMANDE,
+        ]);
+    }
+
+    public function test_echec_envoi_email_validation_conserve_la_decision_et_message_precis(): void
+    {
+        Mail::shouldReceive('to->send')->once()->andThrow(new \RuntimeException('SMTP indisponible'));
+
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+
+        $rdv = $this->rdvDemande($patient, $medecin, $service);
+
+        Livewire::actingAs($secretaire)
+            ->test(\App\Livewire\Secretaire\RendezVousSecretaire::class)
+            ->call('valider', $rdv->id)
+            ->assertSet('messageSucces', null)
+            ->assertSet('messageErreur', 'Rendez-vous validé, mais l\'envoi de l\'email de confirmation a échoué.');
+
+        $rdv->refresh();
+        $this->assertSame(RendezVous::STATUT_VALIDE, $rdv->statut);
+
+        $this->assertDatabaseHas('activity_log', [
+            'event' => 'validation_rendez_vous',
+            'causer_id' => $secretaire->id,
+            'subject_id' => $rdv->id,
+        ]);
+    }
+
+    public function test_echec_envoi_email_rejet_conserve_la_decision_et_message_precis(): void
+    {
+        Mail::shouldReceive('to->send')->once()->andThrow(new \RuntimeException('SMTP indisponible'));
+
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+
+        $rdv = $this->rdvDemande($patient, $medecin, $service);
+
+        Livewire::actingAs($secretaire)
+            ->test(\App\Livewire\Secretaire\RendezVousSecretaire::class)
+            ->call('rejeter', $rdv->id)
+            ->assertSet('messageSucces', null)
+            ->assertSet('messageErreur', 'Demande rejetée et créneau libéré, mais l\'envoi de l\'email au patient a échoué.');
+
+        $rdv->refresh();
+        $this->assertSame(RendezVous::STATUT_ANNULE, $rdv->statut);
+
+        $this->assertDatabaseHas('activity_log', [
+            'event' => 'rejet_rendez_vous',
+            'causer_id' => $secretaire->id,
+            'subject_id' => $rdv->id,
+        ]);
+    }
+
+    public function test_echec_metier_validation_affiche_message_generique_sans_email(): void
+    {
+        Mail::fake();
+
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+
+        $rdv = $this->rdvDemande($patient, $medecin, $service);
+
+        $this->simulerEchecMiseAJour(function () use ($secretaire, $rdv) {
+            Livewire::actingAs($secretaire)
+                ->test(\App\Livewire\Secretaire\RendezVousSecretaire::class)
+                ->call('valider', $rdv->id)
+                ->assertSet('messageSucces', null)
+                ->assertSet('messageErreur', 'Une erreur inattendue est survenue lors de la validation du rendez-vous.');
+
+            $rdv->refresh();
+            $this->assertSame(RendezVous::STATUT_DEMANDE, $rdv->statut);
+
+            Mail::assertNothingSent();
+            $this->assertDatabaseMissing('activity_log', [
+                'event' => 'validation_rendez_vous',
+                'subject_id' => $rdv->id,
+            ]);
+        });
+    }
+
+    public function test_echec_metier_rejet_affiche_message_generique_sans_email(): void
+    {
+        Mail::fake();
+
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+
+        $rdv = $this->rdvDemande($patient, $medecin, $service);
+
+        $this->simulerEchecMiseAJour(function () use ($secretaire, $rdv) {
+            Livewire::actingAs($secretaire)
+                ->test(\App\Livewire\Secretaire\RendezVousSecretaire::class)
+                ->call('rejeter', $rdv->id)
+                ->assertSet('messageSucces', null)
+                ->assertSet('messageErreur', 'Une erreur inattendue est survenue lors du rejet de la demande de rendez-vous.');
+
+            $rdv->refresh();
+            $this->assertSame(RendezVous::STATUT_DEMANDE, $rdv->statut);
+
+            Mail::assertNothingSent();
+            $this->assertDatabaseMissing('activity_log', [
+                'event' => 'rejet_rendez_vous',
+                'subject_id' => $rdv->id,
+            ]);
+        });
+    }
+
+    protected function forcerEchecJournalisation(): void
+    {
+        $logger = \Mockery::mock(\Spatie\Activitylog\ActivityLogger::class, [
+            $this->app->make(\Illuminate\Contracts\Config\Repository::class),
+            $this->app->make(\Spatie\Activitylog\ActivityLogStatus::class),
+            $this->app->make(\Spatie\Activitylog\LogBatch::class),
+            $this->app->make(\Spatie\Activitylog\CauserResolver::class),
+        ]);
+        $logger->shouldReceive('setLogStatus')->andReturnSelf();
+        $logger->shouldReceive('useLog')->andReturnSelf();
+        $logger->shouldReceive('causedBy')->andReturnSelf();
+        $logger->shouldReceive('performedOn')->andReturnSelf();
+        $logger->shouldReceive('event')->andReturnSelf();
+        $logger->shouldReceive('log')->andThrow(new \RuntimeException('Échec de la journalisation'));
+
+        $pending = \Mockery::mock(\Spatie\Activitylog\PendingActivityLog::class);
+        $pending->shouldReceive('logger')->andReturn($logger);
+        $pending->shouldReceive('useLog')->andReturnSelf();
+
+        $this->app->instance(\Spatie\Activitylog\PendingActivityLog::class, $pending);
+    }
+
+    public function test_echec_journalisation_validation_annule_le_changement_de_statut(): void
+    {
+        Mail::fake();
+
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+
+        $rdv = $this->rdvDemande($patient, $medecin, $service);
+
+        $this->forcerEchecJournalisation();
+
+        Livewire::actingAs($secretaire)
+            ->test(\App\Livewire\Secretaire\RendezVousSecretaire::class)
+            ->call('valider', $rdv->id)
+            ->assertSet('messageSucces', null)
+            ->assertSet('messageErreur', 'Une erreur inattendue est survenue lors de la validation du rendez-vous.');
+
+        $rdv->refresh();
+        $this->assertSame(RendezVous::STATUT_DEMANDE, $rdv->statut);
+
+        Mail::assertNothingSent();
+        $this->assertDatabaseMissing('activity_log', [
+            'event' => 'validation_rendez_vous',
+            'subject_id' => $rdv->id,
+        ]);
+    }
+
+    public function test_echec_journalisation_rejet_annule_le_changement_de_statut(): void
+    {
+        Mail::fake();
+
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+
+        $rdv = $this->rdvDemande($patient, $medecin, $service);
+
+        $this->forcerEchecJournalisation();
+
+        Livewire::actingAs($secretaire)
+            ->test(\App\Livewire\Secretaire\RendezVousSecretaire::class)
+            ->call('rejeter', $rdv->id)
+            ->assertSet('messageSucces', null)
+            ->assertSet('messageErreur', 'Une erreur inattendue est survenue lors du rejet de la demande de rendez-vous.');
+
+        $rdv->refresh();
+        $this->assertSame(RendezVous::STATUT_DEMANDE, $rdv->statut);
+
+        Mail::assertNothingSent();
+        $this->assertDatabaseMissing('activity_log', [
+            'event' => 'rejet_rendez_vous',
+            'subject_id' => $rdv->id,
+        ]);
     }
 }

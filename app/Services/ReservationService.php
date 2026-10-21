@@ -129,7 +129,9 @@ class ReservationService
                     ->log('Rendez-vous modifié par le patient');
 
                 DB::afterCommit(function () use ($patient, $rdv) {
-                    Mail::to($patient->email)->send(new RendezVousModifie($rdv->fresh()));
+                    $this->envoyerEmail(function () use ($patient, $rdv) {
+                        Mail::to($patient->email)->send(new RendezVousModifie($rdv->fresh()));
+                    });
                 });
 
                 return $rdv;
@@ -168,12 +170,28 @@ class ReservationService
                     ->log('Rendez-vous annulé par le patient');
 
                 DB::afterCommit(function () use ($patient, $rdv) {
-                    Mail::to($patient->email)->send(new RendezVousAnnule($rdv->fresh()));
+                    $this->envoyerEmail(function () use ($patient, $rdv) {
+                        Mail::to($patient->email)->send(new RendezVousAnnule($rdv->fresh()));
+                    });
                 });
 
                 return $rdv;
             });
         });
+    }
+
+    /**
+     * Envoie un email métier après le commit, en journalisant un éventuel échec.
+     * Le rendez-vous est déjà enregistré : un échec d'envoi ne doit jamais le
+     * remettre en cause ni faire croire que l'opération métier a échoué.
+     */
+    private function envoyerEmail(callable $envoi): void
+    {
+        try {
+            $envoi();
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     /**

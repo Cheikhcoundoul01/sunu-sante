@@ -47,13 +47,16 @@ class Patients extends Component
 
             if ($action === 'valider') {
                 $service->valider($patient, $secretaire);
-                $this->messageSucces = 'Compte patient validé. Un email de confirmation a été envoyé.';
+                $this->messageSucces = 'Compte patient validé. La décision a été enregistrée.';
             } else {
                 $service->rejeter($patient, $secretaire);
-                $this->messageSucces = 'Compte patient rejeté.';
+                $this->messageSucces = 'Compte patient rejeté. La décision a été enregistrée.';
             }
         } catch (DossierDejaTraiteException $e) {
             $this->messageErreur = 'Dossier déjà traité';
+        } catch (\Exception $e) {
+            report($e);
+            $this->messageErreur = 'Une erreur inattendue est survenue lors du traitement du dossier.';
         }
     }
 
