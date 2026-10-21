@@ -7,6 +7,7 @@ use App\Models\RendezVous;
 use App\Models\Salle;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Collection;
 
 /**
  * Service de gestion des disponibilités et conflits pour les salles d'intervention.
@@ -80,6 +81,49 @@ class SalleService
         }
 
         return true;
+    }
+
+    /**
+     * Interventions actives de la salle qui ne sont couvertes par aucune des
+     * plages horaires proposées.
+     *
+     * Une intervention est couverte lorsqu'une plage active correspond à son
+     * jour de la semaine et contient toute sa durée.
+     *
+     * @param  array<int, array{jour_semaine: int, heure_debut: string, heure_fin: string}>  $plages
+     * @return Collection<int, RendezVous>
+     */
+    public function interventionsNonCouvertes(Salle $salle, array $plages): Collection
+    {
+        return RendezVous::query()
+            ->where('salle_id', $salle->id)
+            ->whereIn('statut', RendezVous::statutsActifs())
+            ->get()
+            ->filter(function (RendezVous $rdv) use ($plages) {
+                $debut = $this->heureEnMinutes($rdv->heure_debut);
+
+                if ($debut === null) {
+                    return true;
+                }
+
+                $fin = $debut + ($rdv->duree_prevue ?: 30);
+                $jour = (int) Carbon::parse($rdv->date)->format('N');
+
+                foreach ($plages as $plage) {
+                    if ((int) $plage['jour_semaine'] !== $jour) {
+                        continue;
+                    }
+
+                    $plageDebut = $this->heureEnMinutes($plage['heure_debut']);
+                    $plageFin = $this->heureEnMinutes($plage['heure_fin']);
+
+                    if ($plageDebut !== null && $plageFin !== null && $debut >= $plageDebut && $fin <= $plageFin) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
     }
 
     /**

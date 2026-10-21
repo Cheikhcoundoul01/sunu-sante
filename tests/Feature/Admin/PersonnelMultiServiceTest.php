@@ -88,6 +88,88 @@ class PersonnelMultiServiceTest extends TestCase
             [$principal->id, $supplementaire->id],
             $utilisateur->servicesAutorisesIds()
         );
+
+        // Le pivot ne contient que le service supplémentaire : le principal
+        // reste porté par `users.service_id`.
+        $this->assertDatabaseHas('service_user', [
+            'user_id' => $utilisateur->id,
+            'service_id' => $supplementaire->id,
+        ]);
+        $this->assertDatabaseMissing('service_user', [
+            'user_id' => $utilisateur->id,
+            'service_id' => $principal->id,
+        ]);
+    }
+
+    public function test_le_bloc_services_supplementaires_est_affiche_pour_le_role_secretaire(): void
+    {
+        Livewire::actingAs($this->admin())
+            ->test(Personnel::class)
+            ->set('role', 'Secrétaire de service')
+            ->assertSee('Services supplémentaires');
+    }
+
+    public function test_le_bloc_services_supplementaires_est_masque_pour_les_autres_roles(): void
+    {
+        foreach (['Médecin', "Agent d'accueil", 'Major de service'] as $role) {
+            Livewire::actingAs($this->admin())
+                ->test(Personnel::class)
+                ->set('role', $role)
+                ->assertDontSee('Services supplémentaires');
+        }
+    }
+
+    public function test_les_selecteurs_de_role_et_de_service_principal_sont_reactifs(): void
+    {
+        // Sans `.live`, le navigateur n'enverrait pas le rôle sélectionné et le
+        // bloc « Services supplémentaires » resterait invisible.
+        Livewire::actingAs($this->admin())
+            ->test(Personnel::class)
+            ->assertSee('wire:model.live="role"', false)
+            ->assertSee('wire:model.live="service_id"', false);
+    }
+
+    public function test_le_service_principal_est_retire_des_services_supplementaires_lors_du_changement(): void
+    {
+        $principal = $this->service('Cardiologie');
+        $supplementaire = $this->service('Pédiatrie');
+
+        $secretaire = $this->secretaire($principal, $supplementaire);
+
+        Livewire::actingAs($this->admin())
+            ->test(Personnel::class)
+            ->call('editer', $secretaire->id)
+            ->assertSet('service_id', $principal->id)
+            ->assertSet('servicesSupplementaires', [$supplementaire->id])
+            // Le service supplémentaire devient le principal : il doit quitter
+            // la liste des services supplémentaires (pas de doublon).
+            ->set('service_id', $supplementaire->id)
+            ->assertSet('servicesSupplementaires', [])
+            ->set('name', 'Awa Diop')
+            ->set('email', 'awa.diop@sunu-sante.sn')
+            ->set('password', 'motdepasse123')
+            ->set('password_confirmation', 'motdepasse123')
+            ->call('enregistrer')
+            ->assertHasNoErrors();
+
+        $secretaire->refresh();
+
+        $this->assertSame($supplementaire->id, $secretaire->service_id);
+        $this->assertTrue($secretaire->servicesSupplementaires->isEmpty());
+    }
+
+    public function test_un_service_principal_inchangee_conserve_les_services_supplementaires(): void
+    {
+        $principal = $this->service('Cardiologie');
+        $supplementaire = $this->service('Pédiatrie');
+
+        $secretaire = $this->secretaire($principal, $supplementaire);
+
+        Livewire::actingAs($this->admin())
+            ->test(Personnel::class)
+            ->call('editer', $secretaire->id)
+            ->set('service_id', $principal->id)
+            ->assertSet('servicesSupplementaires', [$supplementaire->id]);
     }
 
     public function test_le_service_principal_ne_peut_pas_etre_repete_en_supplementaire(): void

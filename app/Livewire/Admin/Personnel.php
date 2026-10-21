@@ -96,6 +96,27 @@ class Personnel extends Component
     }
 
     /**
+     * Le service principal ne peut pas figurer parmi les services
+     * supplémentaires : on le retire de la sélection dès que le principal
+     * change, pour éviter une affectation en doublon.
+     */
+    public function updatedServiceId($valeur): void
+    {
+        // La valeur reçue est celle du navigateur : elle peut être une chaîne
+        // vide, donc pas de type strict ici.
+        $principal = ($valeur === '' || $valeur === null) ? null : (int) $valeur;
+
+        if ($principal === null) {
+            return;
+        }
+
+        $this->servicesSupplementaires = collect($this->servicesSupplementaires)
+            ->reject(fn ($id) => (int) $id === $principal)
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     protected function rules(): array

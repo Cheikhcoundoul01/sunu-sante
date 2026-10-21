@@ -56,7 +56,7 @@
             <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
                     <x-label for="role">Rôle</x-label>
-                    <select id="role" wire:model="role"
+                    <select id="role" wire:model.live="role"
                             @if ($errors->has('role')) aria-invalid="true" aria-describedby="role-error" @endif
                             @class([
                                 'mt-1 block w-full rounded-lg border px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 motion-reduce:transition-none',
@@ -75,7 +75,7 @@
 
                 <div>
                     <x-label for="service_id">Service</x-label>
-                    <select id="service_id" wire:model="service_id"
+                    <select id="service_id" wire:model.live="service_id"
                             @if ($errors->has('service_id')) aria-invalid="true" aria-describedby="service_id-error" @endif
                             @class([
                                 'mt-1 block w-full rounded-lg border px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 motion-reduce:transition-none',

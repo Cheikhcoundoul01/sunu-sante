@@ -24,10 +24,17 @@
         </x-card>
     @endif
 
-    {{-- Formulaire ajout salle --}}
+    {{-- Formulaire ajout / modification salle --}}
     <x-card class="mt-6 p-4">
-        <h2 class="text-lg font-medium text-slate-900">Ajouter une salle</h2>
-        <form wire:submit.prevent="ajouterSalle" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <h2 class="text-lg font-medium text-slate-900">
+            {{ $salleId ? 'Modifier la salle' : 'Ajouter une salle' }}
+        </h2>
+        <p class="mt-1 text-sm text-slate-600">
+            {{ $salleId
+                ? "Corrigez le nom ou la description. Le service et l'activation de la salle ne changent pas."
+                : 'La salle est rattachée à votre service principal.' }}
+        </p>
+        <form wire:submit.prevent="enregistrerSalle" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
                 <x-label for="nom">Nom de la salle</x-label>
                 <input type="text" id="nom" wire:model="nom" class="mt-1 block w-full" required maxlength="100" placeholder="Ex: Bloc opératoire 1">
@@ -38,16 +45,23 @@
                 <textarea id="description" wire:model="description" rows="2" class="mt-1 block w-full" placeholder="Ex: Salle de chirurgie cardiaque..."></textarea>
                 @error('description') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
-            <div class="flex items-end">
-                <label class="flex items-center gap-2 text-sm">
-                    <input type="checkbox" wire:model="active" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500" checked>
-                    Active
-                </label>
-            </div>
-            <div class="sm:col-span-3">
-                <button type="submit" wire:loading.attr="disabled" class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50">
-                    Ajouter la salle
+            @unless ($salleId)
+                <div class="flex items-end">
+                    <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" wire:model="active" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500" checked>
+                        Active
+                    </label>
+                </div>
+            @endunless
+            <div class="sm:col-span-3 flex flex-wrap items-center gap-3">
+                <button type="submit" wire:loading.attr="disabled" class="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 motion-reduce:transition-none disabled:opacity-50">
+                    {{ $salleId ? 'Enregistrer les modifications' : 'Ajouter la salle' }}
                 </button>
+                @if ($salleId)
+                    <button type="button" wire:click="annulerModificationSalle" wire:loading.attr="disabled" class="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 motion-reduce:transition-none disabled:opacity-50">
+                        Annuler
+                    </button>
+                @endif
             </div>
         </form>
     </x-card>
@@ -77,13 +91,19 @@
                                 @endif
                             </td>
                             <td class="px-4 py-3 text-right">
-                                <button type="button" wire:click="basculerSalle({{ $salle->id }})" wire:loading.attr="disabled"
-                                    class="inline-flex items-center justify-center rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50
-                                        {{ $salle->active
-                                            ? 'border-red-300 text-red-700 hover:bg-red-50'
-                                            : 'border-green-300 text-green-700 hover:bg-green-50' }}">
-                                    {{ $salle->active ? 'Désactiver' : 'Réactiver' }}
-                                </button>
+                                <div class="flex flex-wrap justify-end gap-2">
+                                    <button type="button" wire:click="modifierSalle({{ $salle->id }})" wire:loading.attr="disabled"
+                                        class="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 motion-reduce:transition-none disabled:opacity-50">
+                                        Modifier
+                                    </button>
+                                    <button type="button" wire:click="basculerSalle({{ $salle->id }})" wire:loading.attr="disabled"
+                                        class="inline-flex min-h-[44px] items-center justify-center rounded-lg border px-3 text-sm font-medium transition-colors motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50
+                                            {{ $salle->active
+                                                ? 'border-red-300 text-red-700 hover:bg-red-50'
+                                                : 'border-green-300 text-green-700 hover:bg-green-50' }}">
+                                        {{ $salle->active ? 'Désactiver' : 'Réactiver' }}
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     @empty
@@ -101,21 +121,34 @@
             <p class="mt-1 text-sm text-slate-600">Définissez les plages horaires d'ouverture de chaque salle par jour de la semaine.</p>
         </div>
 
-        {{-- Formulaire ajout disponibilité --}}
+        {{-- Formulaire ajout / modification disponibilité --}}
         <x-card class="mt-4 p-4">
-            <h3 class="text-lg font-medium text-slate-900">Ajouter une disponibilité</h3>
-            <form wire:submit.prevent="ajouterDisponibilite" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-5">
+            <h3 class="text-lg font-medium text-slate-900">
+                {{ $dispoId ? 'Modifier la disponibilité' : 'Ajouter une disponibilité' }}
+            </h3>
+            <p class="mt-1 text-sm text-slate-600">
+                {{ $dispoId
+                    ? "Corrigez le jour ou les horaires. La salle et l'activation ne changent pas."
+                    : "Définissez une plage horaire d'ouverture pour une salle." }}
+            </p>
+            <form wire:submit.prevent="enregistrerDisponibilite" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-5">
                 <div>
                     <x-label for="dispoSalleId">Salle</x-label>
-                    <select id="dispoSalleId" wire:model="dispoSalleId" class="mt-1 block w-full" required>
-                        <option value="">— Choisir —</option>
-                        @foreach ($salles as $salle)
-                            @if ($salle->active)
-                                <option value="{{ $salle->id }}">{{ $salle->nom }}</option>
-                            @endif
-                        @endforeach
-                    </select>
-                    @error('dispoSalleId') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    @if ($dispoId)
+                        <input type="text" id="dispoSalleId" value="{{ $salleEnEdition?->nom ?? '—' }}" readonly
+                            class="mt-1 block w-full rounded-lg border-slate-200 bg-slate-50 text-slate-700 shadow-sm sm:text-sm">
+                        <p class="mt-1 text-xs text-slate-500">La salle ne change pas lors d'une modification.</p>
+                    @else
+                        <select id="dispoSalleId" wire:model="dispoSalleId" class="mt-1 block w-full" required>
+                            <option value="">— Choisir —</option>
+                            @foreach ($salles as $salle)
+                                @if ($salle->active)
+                                    <option value="{{ $salle->id }}">{{ $salle->nom }}</option>
+                                @endif
+                            @endforeach
+                        </select>
+                        @error('dispoSalleId') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    @endif
                 </div>
                 <div>
                     <x-label for="dispoJourSemaine">Jour</x-label>
@@ -137,16 +170,23 @@
                     <input type="time" id="dispoHeureFin" wire:model="dispoHeureFin" class="mt-1 block w-full" required>
                     @error('dispoHeureFin') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                 </div>
-                <div class="flex items-end">
-                    <label class="flex items-center gap-2 text-sm">
-                        <input type="checkbox" wire:model="dispoActive" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500" checked>
-                        Active
-                    </label>
-                </div>
-                <div class="sm:col-span-5">
-                    <button type="submit" wire:loading.attr="disabled" class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50">
-                        Ajouter la disponibilité
+                @unless ($dispoId)
+                    <div class="flex items-end">
+                        <label class="flex items-center gap-2 text-sm">
+                            <input type="checkbox" wire:model="dispoActive" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500" checked>
+                            Active
+                        </label>
+                    </div>
+                @endunless
+                <div class="sm:col-span-5 flex flex-wrap items-center gap-3">
+                    <button type="submit" wire:loading.attr="disabled" class="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 motion-reduce:transition-none disabled:opacity-50">
+                        {{ $dispoId ? 'Enregistrer les modifications' : 'Ajouter la disponibilité' }}
                     </button>
+                    @if ($dispoId)
+                        <button type="button" wire:click="annulerModificationDisponibilite" wire:loading.attr="disabled" class="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 motion-reduce:transition-none disabled:opacity-50">
+                            Annuler
+                        </button>
+                    @endif
                 </div>
             </form>
         </x-card>
@@ -155,7 +195,7 @@
         @if ($disponibilites->isEmpty())
             <x-card class="mt-4 p-8 text-center">
                 <svg class="mx-auto w-12 h-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v16a2 2 0 002 2z" />
                 </svg>
                 <h2 class="mt-3 text-lg font-medium text-slate-900">Aucune disponibilité</h2>
                 <p class="mt-1 text-sm text-slate-600">Ajoutez des plages horaires pour vos salles.</p>
@@ -189,13 +229,19 @@
                                     @endif
                                 </td>
                                 <td class="px-4 py-3 text-right">
-                                    <button type="button" wire:click="basculerDisponibilite({{ $dispo->id }})" wire:loading.attr="disabled"
-                                        class="inline-flex items-center justify-center rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50
-                                            {{ $dispo->active
-                                                ? 'border-red-300 text-red-700 hover:bg-red-50'
-                                                : 'border-green-300 text-green-700 hover:bg-green-50' }}">
-                                        {{ $dispo->active ? 'Désactiver' : 'Réactiver' }}
-                                    </button>
+                                    <div class="flex flex-wrap justify-end gap-2">
+                                        <button type="button" wire:click="modifierDisponibilite({{ $dispo->id }})" wire:loading.attr="disabled"
+                                            class="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 motion-reduce:transition-none disabled:opacity-50">
+                                            Modifier
+                                        </button>
+                                        <button type="button" wire:click="basculerDisponibilite({{ $dispo->id }})" wire:loading.attr="disabled"
+                                            class="inline-flex min-h-[44px] items-center justify-center rounded-lg border px-3 text-sm font-medium transition-colors motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50
+                                                {{ $dispo->active
+                                                    ? 'border-red-300 text-red-700 hover:bg-red-50'
+                                                    : 'border-green-300 text-green-700 hover:bg-green-50' }}">
+                                            {{ $dispo->active ? 'Désactiver' : 'Réactiver' }}
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         @empty
