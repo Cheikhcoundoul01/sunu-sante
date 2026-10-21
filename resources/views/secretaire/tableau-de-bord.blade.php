@@ -19,23 +19,23 @@
         $initiales = 'S';
     }
 
-    $serviceId = $user->service_id;
+    $servicesAutorises = $user->servicesAutorisesIds();
 
     $patientsAValider = \App\Models\User::role('Patient')
         ->where('statut_compte', 'En attente')
         ->count();
 
-    $rdvDuJour = $serviceId
-        ? \App\Models\RendezVous::where('service_id', $serviceId)
+    $rdvDuJour = empty($servicesAutorises)
+        ? 0
+        : \App\Models\RendezVous::whereIn('service_id', $servicesAutorises)
             ->whereDate('date', now()->toDateString())
-            ->count()
-        : 0;
+            ->count();
 
-    $rdvEnAttente = $serviceId
-        ? \App\Models\RendezVous::where('service_id', $serviceId)
+    $rdvEnAttente = empty($servicesAutorises)
+        ? 0
+        : \App\Models\RendezVous::whereIn('service_id', $servicesAutorises)
             ->where('statut', \App\Models\RendezVous::STATUT_DEMANDE)
-            ->count()
-        : 0;
+            ->count();
 
     $cartes = [
         [

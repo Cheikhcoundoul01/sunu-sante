@@ -5,7 +5,6 @@ namespace App\Livewire\Secretaire;
 use App\Mail\RendezVousAnnule;
 use App\Mail\RendezVousValide;
 use App\Models\RendezVous;
-use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Component;
@@ -16,16 +15,31 @@ class RendezVousSecretaire extends Component
     use WithPagination;
 
     public string $filtreStatut = 'Demandé';
+
     public ?string $search = null;
+
     public ?string $dateDebut = null;
+
     public ?string $dateFin = null;
 
     public ?string $messageSucces = null;
+
     public ?string $messageErreur = null;
 
     public function mount(): void
     {
         abort_unless(auth()->user()->can('rdv.voir'), 403);
+    }
+
+    /**
+     * Services autorisés pour la secrétaire (service principal + services
+     * supplémentaires). Vide si aucun service n'est rattaché.
+     *
+     * @return array<int, int>
+     */
+    protected function servicesAutorises(): array
+    {
+        return auth()->user()->servicesAutorisesIds();
     }
 
     public function valider(int $id): void
@@ -36,16 +50,18 @@ class RendezVousSecretaire extends Component
         $this->messageErreur = null;
 
         $rdv = RendezVous::whereKey($id)
-            ->where('service_id', auth()->user()->service_id)
+            ->whereIn('service_id', $this->servicesAutorises())
             ->first();
 
         if (! $rdv) {
             $this->messageErreur = 'Rendez-vous introuvable dans votre service.';
+
             return;
         }
 
         if ($rdv->statut !== RendezVous::STATUT_DEMANDE) {
             $this->messageErreur = 'Seuls les rendez-vous au statut « Demandé » peuvent être validés.';
+
             return;
         }
 
@@ -62,6 +78,7 @@ class RendezVousSecretaire extends Component
         } catch (\Throwable $e) {
             report($e);
             $this->messageErreur = 'Une erreur inattendue est survenue lors de la validation du rendez-vous.';
+
             return;
         }
 
@@ -85,16 +102,18 @@ class RendezVousSecretaire extends Component
         $this->messageErreur = null;
 
         $rdv = RendezVous::whereKey($id)
-            ->where('service_id', auth()->user()->service_id)
+            ->whereIn('service_id', $this->servicesAutorises())
             ->first();
 
         if (! $rdv) {
             $this->messageErreur = 'Rendez-vous introuvable dans votre service.';
+
             return;
         }
 
         if ($rdv->statut !== RendezVous::STATUT_DEMANDE) {
             $this->messageErreur = 'Seuls les rendez-vous au statut « Demandé » peuvent être rejetés.';
+
             return;
         }
 
@@ -111,6 +130,7 @@ class RendezVousSecretaire extends Component
         } catch (\Throwable $e) {
             report($e);
             $this->messageErreur = 'Une erreur inattendue est survenue lors du rejet de la demande de rendez-vous.';
+
             return;
         }
 
@@ -129,15 +149,15 @@ class RendezVousSecretaire extends Component
     public function render()
     {
         $query = RendezVous::query()
-            ->where('service_id', auth()->user()->service_id)
+            ->whereIn('service_id', $this->servicesAutorises())
             ->with(['patient', 'medecin', 'service'])
             ->when($this->filtreStatut !== 'Tous', function ($q) {
                 $q->where('statut', $this->filtreStatut);
             })
             ->when($this->search, function ($q) {
                 $q->whereHas('patient', function ($sq) {
-                    $sq->where('name', 'like', '%' . $this->search . '%')
-                       ->orWhere('email', 'like', '%' . $this->search . '%');
+                    $sq->where('name', 'like', '%'.$this->search.'%')
+                        ->orWhere('email', 'like', '%'.$this->search.'%');
                 });
             })
             ->when($this->dateDebut, function ($q) {

@@ -93,6 +93,28 @@
                 </div>
             </div>
 
+            @if ($role === 'Secrétaire de service')
+                <div>
+                    <x-label for="servicesSupplementaires">Services supplémentaires (facultatif)</x-label>
+                    <p class="mt-1 text-sm text-slate-500">Le secrétaire pourra gérer les rendez-vous, disponibilités et salles de son service principal et des services cochés ci-dessous.</p>
+                    <div id="servicesSupplementaires" class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
+                         @if ($errors->has('servicesSupplementaires')) aria-invalid="true" aria-describedby="servicesSupplementaires-error" @endif>
+                        @foreach ($services as $service)
+                            @if ((int) $service->id !== (int) $service_id)
+                                <label class="flex min-h-[44px] items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#0F766E]">
+                                    <input type="checkbox" value="{{ $service->id }}" wire:model="servicesSupplementaires"
+                                           class="h-4 w-4 rounded border-slate-300 text-[#0F766E] focus:ring-[#0F766E]">
+                                    {{ $service->nom }}
+                                </label>
+                            @endif
+                        @endforeach
+                    </div>
+                    <p id="servicesSupplementaires-error" class="mt-1 min-h-[1.25rem] text-sm text-red-700" @if (! $errors->has('servicesSupplementaires')) aria-hidden="true" @endif>
+                        @error('servicesSupplementaires') {{ $message }} @enderror
+                    </p>
+                </div>
+            @endif
+
             <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
                     <x-label for="password">{{ $editingId ? 'Nouveau mot de passe (facultatif)' : 'Mot de passe initial' }}</x-label>
@@ -143,52 +165,133 @@
 
     {{-- Liste du personnel --}}
     <x-card class="p-6">
-        <h2 class="mb-4 text-lg font-semibold text-[#115E59]">Comptes du personnel existants</h2>
+        <div class="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+            <h2 class="text-lg font-semibold text-[#115E59]">Comptes du personnel existants</h2>
+            <p class="text-sm text-slate-600">
+                <span class="font-semibold text-slate-900">{{ $totalComptes }}</span> {{ $totalComptes > 1 ? 'comptes' : 'compte' }} au total
+                <span class="mx-1 text-slate-300" aria-hidden="true">·</span>
+                <span class="font-semibold text-[#0F766E]">{{ $totalActifs }}</span> {{ $totalActifs > 1 ? 'actifs' : 'actif' }}
+            </p>
+        </div>
+
+        {{-- Recherche et filtres --}}
+        <form wire:submit.prevent="render" class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+                <x-label for="search">Recherche</x-label>
+                <input type="text" id="search" wire:model.live.debounce.300ms="search"
+                       class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#0F766E] focus:outline-none focus:ring-2 focus:ring-[#0F766E]"
+                       placeholder="Nom ou e-mail...">
+            </div>
+
+            <div>
+                <x-label for="filtreRole">Rôle</x-label>
+                <select id="filtreRole" wire:model.live="filtreRole"
+                        class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#0F766E] focus:outline-none focus:ring-2 focus:ring-[#0F766E]">
+                    <option value="Tous">Tous les rôles</option>
+                    @foreach ($roles as $r)
+                        <option value="{{ $r }}">{{ $r }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div>
+                <x-label for="filtreService">Service</x-label>
+                <select id="filtreService" wire:model.live="filtreService"
+                        class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#0F766E] focus:outline-none focus:ring-2 focus:ring-[#0F766E]">
+                    <option value="Tous">Tous les services</option>
+                    @foreach ($services as $service)
+                        <option value="{{ $service->id }}">{{ $service->nom }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div>
+                <x-label for="filtreEtat">État</x-label>
+                <select id="filtreEtat" wire:model.live="filtreEtat"
+                        class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#0F766E] focus:outline-none focus:ring-2 focus:ring-[#0F766E]">
+                    @foreach ($etats as $etat)
+                        <option value="{{ $etat }}">{{ $etat === 'Tous' ? 'Tous les états' : $etat }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </form>
 
         @if ($personnel->isEmpty())
-            <p class="text-sm text-slate-500">Aucun compte du personnel enregistré pour le moment.</p>
+            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center">
+                <p class="text-sm font-medium text-slate-700">Aucun compte du personnel trouvé</p>
+                <p class="mt-1 text-sm text-slate-500">Ajustez la recherche ou les filtres pour élargir les résultats.</p>
+            </div>
         @else
             <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
                 <table class="min-w-full divide-y divide-slate-200">
                     <thead class="bg-slate-50">
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Nom complet</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">E-mail</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Rôle</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Service</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">État</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-slate-500">Actions</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Membre du personnel</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Rôle</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Service</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">État</th>
+                            <th scope="col" class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-slate-500">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @foreach ($personnel as $utilisateur)
-                            <tr>
-                                <td class="px-4 py-3 text-sm font-medium text-slate-900">{{ $utilisateur->nomAffiche }}</td>
-                                <td class="px-4 py-3 text-sm text-slate-700">{{ $utilisateur->email }}</td>
-                                <td class="px-4 py-3 text-sm text-slate-700">
-                                    {{ $utilisateur->getRoleNames()->first() }}
-                                </td>
-                                <td class="px-4 py-3 text-sm text-slate-700">
-                                    {{ $utilisateur->service?->nom ?? '—' }}
+                            @php
+                                $mots = preg_split('/\s+/u', \Illuminate\Support\Str::ascii($utilisateur->nomAffiche), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+                                $initiales = '';
+                                foreach (array_slice($mots, 0, 2) as $mot) {
+                                    $initiales .= mb_strtoupper(mb_substr($mot, 0, 1));
+                                }
+                                $initiales = $initiales !== '' ? $initiales : 'A';
+                            @endphp
+                            <tr @class(['bg-slate-50/60' => ! $utilisateur->estActif()])>
+                                <td class="px-4 py-3">
+                                    <div class="flex items-center gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-teal-50 text-xs font-semibold text-[#115E59] ring-1 ring-inset ring-teal-100 {{ $utilisateur->estActif() ? '' : 'opacity-70' }}" aria-hidden="true">{{ $initiales }}</span>
+                                        <div class="min-w-0">
+                                            <p class="truncate text-sm font-medium {{ $utilisateur->estActif() ? 'text-slate-900' : 'text-slate-500' }}">{{ $utilisateur->nomAffiche }}</p>
+                                            <p class="truncate text-xs {{ $utilisateur->estActif() ? 'text-slate-500' : 'text-slate-400' }}">{{ $utilisateur->email }}</p>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3">
-                                    @if ($utilisateur->statut_compte === 'Actif')
-                                        <span class="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800">Actif</span>
+                                    <span class="inline-flex items-center whitespace-nowrap rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-[#115E59] ring-1 ring-inset ring-teal-100">{{ $utilisateur->getRoleNames()->first() }}</span>
+                                </td>
+                                <td class="px-4 py-3 text-sm {{ $utilisateur->estActif() ? 'text-slate-700' : 'text-slate-400' }}">
+                                    <span>{{ $utilisateur->service?->nom ?? '—' }}</span>
+                                    @if ($utilisateur->servicesSupplementaires->isNotEmpty())
+                                        <span class="mt-1 flex flex-wrap gap-1">
+                                            @foreach ($utilisateur->servicesSupplementaires as $supp)
+                                                <span class="inline-flex items-center whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200">+ {{ $supp->nom }}</span>
+                                            @endforeach
+                                        </span>
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3">
+                                    @if ($utilisateur->estActif())
+                                        <span class="inline-flex items-center whitespace-nowrap rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800 ring-1 ring-inset ring-teal-100">Actif</span>
                                     @else
-                                        <span class="inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800">Rejeté</span>
+                                        <span class="inline-flex items-center whitespace-nowrap rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-100">Désactivé</span>
                                     @endif
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="flex flex-wrap justify-end gap-2">
                                         <button type="button" wire:click="editer({{ $utilisateur->id }})"
-                                                class="inline-flex min-h-[40px] items-center rounded-full border border-slate-300 px-4 text-sm font-medium text-slate-700 transition-colors hover:border-[#0F766E] hover:text-[#0F766E] motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]">
+                                                class="inline-flex min-h-[44px] items-center rounded-full border border-slate-300 px-4 text-sm font-medium text-slate-700 transition-colors hover:border-[#0F766E] hover:text-[#0F766E] motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]">
                                             Modifier
                                         </button>
-                                        <button type="button" wire:click="basculer({{ $utilisateur->id }})"
-                                                class="inline-flex min-h-[40px] items-center rounded-full border px-4 text-sm font-medium transition-colors motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]
-                                                       {{ $utilisateur->statut_compte === 'Actif' ? 'border-red-300 text-red-700 hover:bg-red-50' : 'border-green-300 text-green-800 hover:bg-green-50' }}">
-                                            {{ $utilisateur->statut_compte === 'Actif' ? 'Désactiver' : 'Réactiver' }}
-                                        </button>
+                                        @if ($utilisateur->estActif())
+                                            <button type="button" wire:click="basculer({{ $utilisateur->id }})"
+                                                    wire:confirm="Désactiver le compte de {{ $utilisateur->nomAffiche }} ? Le personnel concerné ne pourra plus se connecter."
+                                                    class="inline-flex min-h-[44px] items-center rounded-full border border-red-300 px-4 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]">
+                                                Désactiver
+                                            </button>
+                                        @else
+                                            <button type="button" wire:click="basculer({{ $utilisateur->id }})"
+                                                    wire:confirm="Réactiver le compte de {{ $utilisateur->nomAffiche }} ?"
+                                                    class="inline-flex min-h-[44px] items-center rounded-full border border-teal-300 px-4 text-sm font-medium text-[#115E59] transition-colors hover:bg-teal-50 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]">
+                                                Réactiver
+                                            </button>
+                                        @endif
                                     </div>
                                 </td>
                             </tr>
@@ -196,6 +299,12 @@
                     </tbody>
                 </table>
             </div>
+
+            @if ($personnel->hasPages())
+                <div class="mt-4 border-t border-slate-200 pt-4">
+                    {{ $personnel->links() }}
+                </div>
+            @endif
         @endif
     </x-card>
 </div>

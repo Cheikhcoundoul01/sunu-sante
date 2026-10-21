@@ -6,7 +6,7 @@ use App\Models\DisponibiliteSalle;
 use App\Models\Salle;
 use App\Models\Service;
 use App\Services\SalleService;
-use Carbon\Carbon;
+use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -15,17 +15,25 @@ class Salles extends Component
     use WithPagination;
 
     public ?int $salleId = null;
+
     public string $nom = '';
+
     public string $description = '';
+
     public bool $active = true;
 
     public ?int $dispoSalleId = null;
+
     public ?int $dispoJourSemaine = null;
+
     public ?string $dispoHeureDebut = null;
+
     public ?string $dispoHeureFin = null;
+
     public bool $dispoActive = true;
 
     public ?string $messageSucces = null;
+
     public ?string $messageErreur = null;
 
     protected function rules(): array
@@ -42,6 +50,17 @@ class Salles extends Component
         abort_unless(auth()->user()->can('salles.gerer'), 403);
     }
 
+    /**
+     * Services autorisés pour la secrétaire (service principal + services
+     * supplémentaires).
+     *
+     * @return array<int, int>
+     */
+    protected function servicesAutorises(): array
+    {
+        return auth()->user()->servicesAutorisesIds();
+    }
+
     public function ajouterSalle(): void
     {
         abort_unless(auth()->user()->can('salles.gerer'), 403);
@@ -52,15 +71,17 @@ class Salles extends Component
 
         if ($serviceId === null) {
             $this->messageErreur = "Aucun service n'est rattaché à votre compte.";
+
             return;
         }
 
-        $existe = Salle::where('service_id', $serviceId)
+        $existe = Salle::whereIn('service_id', $this->servicesAutorises())
             ->where('nom', $this->nom)
             ->exists();
 
         if ($existe) {
             $this->messageErreur = 'Une salle avec ce nom existe déjà dans votre service.';
+
             return;
         }
 
@@ -84,11 +105,11 @@ class Salles extends Component
         $this->messageSucces = null;
         $this->messageErreur = null;
 
-        $serviceId = auth()->user()->service_id;
-        $salle = Salle::whereKey($id)->where('service_id', $serviceId)->first();
+        $salle = Salle::whereKey($id)->whereIn('service_id', $this->servicesAutorises())->first();
 
         if (! $salle) {
             $this->messageErreur = 'Salle introuvable dans votre service.';
+
             return;
         }
 
@@ -108,16 +129,17 @@ class Salles extends Component
                 'dispoHeureDebut' => 'required|date_format:H:i',
                 'dispoHeureFin' => 'required|date_format:H:i|after:dispoHeureDebut',
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             $this->messageErreur = $e->validator->errors()->first();
+
             return;
         }
 
-        $serviceId = auth()->user()->service_id;
-        $salle = Salle::whereKey($this->dispoSalleId)->where('service_id', $serviceId)->first();
+        $salle = Salle::whereKey($this->dispoSalleId)->whereIn('service_id', $this->servicesAutorises())->first();
 
         if (! $salle) {
             $this->messageErreur = 'Salle introuvable dans votre service.';
+
             return;
         }
 
@@ -132,12 +154,13 @@ class Salles extends Component
 
         if ($chevauchement) {
             $this->messageErreur = 'Une disponibilité existe déjà sur cette plage horaire pour ce jour.';
+
             return;
         }
 
         DisponibiliteSalle::create([
             'salle_id' => $salle->id,
-            'service_id' => $serviceId,
+            'service_id' => $salle->service_id,
             'jour_semaine' => $this->dispoJourSemaine,
             'heure_debut' => $this->dispoHeureDebut,
             'heure_fin' => $this->dispoHeureFin,
@@ -157,13 +180,13 @@ class Salles extends Component
         $this->messageSucces = null;
         $this->messageErreur = null;
 
-        $serviceId = auth()->user()->service_id;
         $dispo = DisponibiliteSalle::whereKey($id)
-            ->whereHas('salle', fn ($q) => $q->where('service_id', $serviceId))
+            ->whereHas('salle', fn ($q) => $q->whereIn('service_id', $this->servicesAutorises()))
             ->first();
 
         if (! $dispo) {
             $this->messageErreur = 'Disponibilité introuvable dans votre service.';
+
             return;
         }
 
@@ -174,20 +197,20 @@ class Salles extends Component
 
     public function render(SalleService $salleService)
     {
-        $serviceId = auth()->user()->service_id;
+        $services = $this->servicesAutorises();
 
-        $salles = $serviceId === null
+        $salles = empty($services)
             ? collect()
             : Salle::query()
-                ->where('service_id', $serviceId)
+                ->whereIn('service_id', $services)
                 ->with(['disponibilites'])
                 ->orderBy('nom')
                 ->get();
 
-        $disponibilites = $serviceId === null
+        $disponibilites = empty($services)
             ? collect()
             : DisponibiliteSalle::query()
-                ->whereHas('salle', fn ($q) => $q->where('service_id', $serviceId))
+                ->whereHas('salle', fn ($q) => $q->whereIn('service_id', $services))
                 ->with('salle')
                 ->orderBy('jour_semaine')
                 ->orderBy('heure_debut')

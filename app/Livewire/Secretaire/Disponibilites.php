@@ -54,6 +54,17 @@ class Disponibilites extends Component
         $this->jour = Carbon::now()->toDateString();
     }
 
+    /**
+     * Services autorisés pour la secrétaire (service principal + services
+     * supplémentaires).
+     *
+     * @return array<int, int>
+     */
+    protected function servicesAutorises(): array
+    {
+        return auth()->user()->servicesAutorisesIds();
+    }
+
     public function ajouter(CreneauService $creneaux): void
     {
         abort_unless(auth()->user()->can('disponibilites.gerer'), 403);
@@ -63,18 +74,18 @@ class Disponibilites extends Component
 
         $this->validate();
 
-        $serviceId = auth()->user()->service_id;
+        $services = $this->servicesAutorises();
 
-        if ($serviceId === null) {
+        if (empty($services)) {
             $this->messageErreur = "Aucun service n'est rattaché à votre compte.";
 
             return;
         }
 
-        // Périmètre : le médecin doit appartenir au service de la secrétaire.
+        // Périmètre : le médecin doit appartenir à un service autorisé.
         $medecin = User::role('Médecin')
             ->whereKey($this->medecinId)
-            ->where('service_id', $serviceId)
+            ->whereIn('service_id', $services)
             ->first();
 
         if ($medecin === null) {
@@ -115,7 +126,7 @@ class Disponibilites extends Component
 
         Disponibilite::create([
             'medecin_id' => $medecin->id,
-            'service_id' => $serviceId,
+            'service_id' => $medecin->service_id,
             'jour' => $jour->toDateString(),
             'heure_debut' => $this->heure_debut,
             'heure_fin' => $this->heure_fin,
@@ -135,10 +146,8 @@ class Disponibilites extends Component
         $this->messageSucces = null;
         $this->messageErreur = null;
 
-        $serviceId = auth()->user()->service_id;
-
         $disponibilite = Disponibilite::whereKey($id)
-            ->where('service_id', $serviceId)
+            ->whereIn('service_id', $this->servicesAutorises())
             ->first();
 
         if ($disponibilite === null) {
@@ -156,16 +165,16 @@ class Disponibilites extends Component
 
     public function render(CreneauService $creneaux)
     {
-        $serviceId = auth()->user()->service_id;
+        $services = $this->servicesAutorises();
 
-        $medecins = $serviceId === null
+        $medecins = empty($services)
             ? collect()
-            : User::role('Médecin')->where('service_id', $serviceId)->orderBy('name')->get();
+            : User::role('Médecin')->whereIn('service_id', $services)->orderBy('name')->get();
 
-        $disponibilites = $serviceId === null
+        $disponibilites = empty($services)
             ? collect()
             : Disponibilite::query()
-                ->where('service_id', $serviceId)
+                ->whereIn('service_id', $services)
                 ->when($this->medecinId, fn ($query) => $query->where('medecin_id', $this->medecinId))
                 ->orderBy('jour')
                 ->orderBy('heure_debut')

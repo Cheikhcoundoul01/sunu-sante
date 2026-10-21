@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Service extends Model
@@ -24,11 +25,21 @@ class Service extends Model
     }
 
     /**
-     * Membres du personnel rattachés à ce service.
+     * Membres du personnel rattachés à ce service (service principal).
      */
     public function utilisateurs(): HasMany
     {
         return $this->hasMany(User::class);
+    }
+
+    /**
+     * Personnel affecté à ce service en tant que service supplémentaire
+     * (secrétaires multi-service).
+     */
+    public function personnelsSupplementaires(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'service_user')
+            ->withTimestamps();
     }
 
     /**

@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
@@ -66,10 +67,45 @@ class User extends Authenticatable
 
     /**
      * Service auquel appartient ce membre du personnel (personnel de service).
+     *
+     * Pour un secrétaire multi-service, il s'agit du service principal.
+     * Les autres rôles n'utilisent que cette relation.
      */
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);
+    }
+
+    /**
+     * Services supplémentaires explicitement affectés à ce secrétaire.
+     * Ne concerne que le rôle « Secrétaire de service » ; vide pour les autres rôles.
+     */
+    public function servicesSupplementaires(): BelongsToMany
+    {
+        return $this->belongsToMany(Service::class, 'service_user')
+            ->withTimestamps();
+    }
+
+    /**
+     * Identifiants des services autorisés pour ce secrétaire : service principal
+     * + services supplémentaires affectés. Renvoie un tableau vide pour un
+     * utilisateur sans service principal ni affectation (ex. patient).
+     *
+     * @return array<int, int>
+     */
+    public function servicesAutorisesIds(): array
+    {
+        $ids = [];
+
+        if ($this->service_id !== null) {
+            $ids[] = (int) $this->service_id;
+        }
+
+        foreach ($this->servicesSupplementaires()->pluck('services.id') as $id) {
+            $ids[] = (int) $id;
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /**
