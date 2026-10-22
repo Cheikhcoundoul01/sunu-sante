@@ -2,11 +2,21 @@
     <div class="flex items-center justify-between mb-6">
         <div>
             <h1 class="text-2xl font-semibold text-teal-800">Statistiques globales</h1>
-            <p class="mt-1 text-sm text-slate-600">Vue d'ensemble de l'ensemble des services | {{ $stats['date'] }}</p>
+            <p class="mt-1 text-sm text-slate-600">Vue d'ensemble de l'ensemble des services | {{ $libellePeriode }}</p>
         </div>
-        <div>
-            <label for="date" class="text-sm font-medium text-slate-700">Date :</label>
-            <input type="date" id="date" wire:model="date" class="ml-2 rounded-lg border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-teal-500">
+        <div class="flex flex-wrap items-center gap-4">
+            <div>
+                <label for="periode" class="text-sm font-medium text-slate-700">Période :</label>
+                <select id="periode" wire:model.live="periode" class="ml-2 rounded-lg border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-teal-500">
+                    <option value="jour">Jour</option>
+                    <option value="semaine">Semaine</option>
+                    <option value="mois">Mois</option>
+                </select>
+            </div>
+            <div>
+                <label for="date" class="text-sm font-medium text-slate-700">Date :</label>
+                <input type="date" id="date" wire:model="date" class="ml-2 rounded-lg border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-teal-500">
+            </div>
         </div>
     </div>
 

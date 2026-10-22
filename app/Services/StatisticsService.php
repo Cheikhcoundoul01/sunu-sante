@@ -18,17 +18,26 @@ use Illuminate\Support\Facades\DB;
 class StatisticsService
 {
     /**
+     * Périodes acceptées par le sélecteur de période.
+     *
+     * @var array<int, string>
+     */
+    public const PERIODES = ['jour', 'semaine', 'mois'];
+
+    /**
      * Statistiques pour un service donné (Major).
      */
-    public function getServiceStatistics(int $serviceId, ?CarbonInterface $date = null): array
+    public function getServiceStatistics(int $serviceId, ?CarbonInterface $date = null, string $periode = 'jour'): array
     {
         $date = $date ? Carbon::parse($date)->startOfDay() : Carbon::now()->startOfDay();
+        $periode = $this->normaliserPeriode($periode);
+        [$debut, $fin] = $this->bornesPeriode($date, $periode);
         $service = Service::findOrFail($serviceId);
 
-        // RDV du jour pour ce service
+        // RDV de la période pour ce service
         $rdvsJour = RendezVous::query()
             ->where('service_id', $serviceId)
-            ->whereDate('date', $date->toDateString())
+            ->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])
             ->get();
 
         $rdvsValides = $rdvsJour->where('statut', 'Validé');
@@ -37,10 +46,10 @@ class StatisticsService
         $rdvsInterventions = $rdvsValides->whereNotNull('salle_id');
         $rdvsConsultations = $rdvsValides->whereNull('salle_id');
 
-        // File d'attente du jour
+        // File d'attente de la période
         $file = FileEntree::query()
             ->where('service_id', $serviceId)
-            ->whereDate('date', $date->toDateString())
+            ->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])
             ->get();
 
         $enAttente = $file->where('statut', 'En attente')->count();
@@ -67,6 +76,11 @@ class StatisticsService
         return [
             'service' => $service,
             'date' => $date->toDateString(),
+            'periode' => [
+                'type' => $periode,
+                'debut' => $debut->toDateString(),
+                'fin' => $fin->toDateString(),
+            ],
             'rdv' => [
                 'total' => $rdvsJour->count(),
                 'valides' => $rdvsValides->count(),
@@ -96,32 +110,35 @@ class StatisticsService
     /**
      * Statistiques globales (Administrateur).
      */
-    public function getGlobalStatistics(?CarbonInterface $date = null): array
+    public function getGlobalStatistics(?CarbonInterface $date = null, string $periode = 'jour'): array
     {
         $date = $date ? Carbon::parse($date)->startOfDay() : Carbon::now()->startOfDay();
+        $periode = $this->normaliserPeriode($periode);
+        [$debut, $fin] = $this->bornesPeriode($date, $periode);
+        $bornes = [$debut->toDateString(), $fin->toDateString()];
 
         $services = Service::where('actif', true)->get();
         $statsParService = [];
 
         foreach ($services as $service) {
-            $statsParService[$service->nom] = $this->getServiceStatistics($service->id, $date);
+            $statsParService[$service->nom] = $this->getServiceStatistics($service->id, $date, $periode);
         }
 
         // Totaux globaux
-        $totalRdv = RendezVous::whereDate('date', $date->toDateString())->count();
-        $totalValides = RendezVous::whereDate('date', $date->toDateString())->where('statut', 'Validé')->count();
-        $totalDemandes = RendezVous::whereDate('date', $date->toDateString())->where('statut', 'Demandé')->count();
-        $totalAnnules = RendezVous::whereDate('date', $date->toDateString())->where('statut', 'Annulé')->count();
-        $totalInterventions = RendezVous::whereDate('date', $date->toDateString())
+        $totalRdv = RendezVous::whereBetween('date', $bornes)->count();
+        $totalValides = RendezVous::whereBetween('date', $bornes)->where('statut', 'Validé')->count();
+        $totalDemandes = RendezVous::whereBetween('date', $bornes)->where('statut', 'Demandé')->count();
+        $totalAnnules = RendezVous::whereBetween('date', $bornes)->where('statut', 'Annulé')->count();
+        $totalInterventions = RendezVous::whereBetween('date', $bornes)
             ->where('statut', 'Validé')
             ->whereNotNull('salle_id')
             ->count();
 
-        $totalFile = FileEntree::whereDate('date', $date->toDateString())->count();
-        $totalEnAttente = FileEntree::whereDate('date', $date->toDateString())->where('statut', 'En attente')->count();
-        $totalEnCours = FileEntree::whereDate('date', $date->toDateString())->where('statut', 'En cours')->count();
-        $totalTermine = FileEntree::whereDate('date', $date->toDateString())->where('statut', 'Terminé')->count();
-        $totalAbsent = FileEntree::whereDate('date', $date->toDateString())->where('statut', 'Absent')->count();
+        $totalFile = FileEntree::whereBetween('date', $bornes)->count();
+        $totalEnAttente = FileEntree::whereBetween('date', $bornes)->where('statut', 'En attente')->count();
+        $totalEnCours = FileEntree::whereBetween('date', $bornes)->where('statut', 'En cours')->count();
+        $totalTermine = FileEntree::whereBetween('date', $bornes)->where('statut', 'Terminé')->count();
+        $totalAbsent = FileEntree::whereBetween('date', $bornes)->where('statut', 'Absent')->count();
 
         $totalMedecins = User::role('Médecin')->count();
         $totalSecretaires = User::role('Secrétaire de service')->count();
@@ -141,6 +158,11 @@ class StatisticsService
 
         return [
             'date' => $date->toDateString(),
+            'periode' => [
+                'type' => $periode,
+                'debut' => $debut->toDateString(),
+                'fin' => $fin->toDateString(),
+            ],
             'global' => [
                 'rdv' => [
                     'total' => $totalRdv,
@@ -169,5 +191,36 @@ class StatisticsService
             'par_service' => $statsParService,
             'top_services' => $topServices,
         ];
+    }
+
+    /**
+     * Ramène une période non reconnue sur la période 'jour'.
+     */
+    public function normaliserPeriode(?string $periode): string
+    {
+        return in_array($periode, self::PERIODES, true) ? $periode : 'jour';
+    }
+
+    /**
+     * Bornes réelles de la période, la date choisie servant de référence.
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    public function bornesPeriode(CarbonInterface $date, ?string $periode = 'jour'): array
+    {
+        $date = Carbon::parse($date)->startOfDay();
+        $periode = $this->normaliserPeriode($periode);
+
+        return match ($periode) {
+            'semaine' => [
+                $date->copy()->startOfWeek(Carbon::MONDAY),
+                $date->copy()->endOfWeek(Carbon::SUNDAY),
+            ],
+            'mois' => [
+                $date->copy()->startOfMonth(),
+                $date->copy()->endOfMonth(),
+            ],
+            default => [$date->copy(), $date->copy()],
+        };
     }
 }
