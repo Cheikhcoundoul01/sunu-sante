@@ -12,6 +12,7 @@ use App\Services\CreneauService;
 use Carbon\Carbon;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -43,6 +44,14 @@ class DisponibilitesTest extends TestCase
     {
         $user = User::factory()->create(['statut_compte' => 'Actif', 'service_id' => $serviceId]);
         $user->assignRole('Médecin');
+
+        return $user;
+    }
+
+    protected function patient(): User
+    {
+        $user = User::factory()->create(['statut_compte' => 'Actif']);
+        $user->assignRole('Patient');
 
         return $user;
     }
@@ -258,22 +267,471 @@ class DisponibilitesTest extends TestCase
         $this->assertDatabaseCount('disponibilites', 0);
     }
 
-    public function test_ajout_date_passee_refuse(): void
+    public function test_creneaux_passes_absents_de_la_liste_principale_et_presents_dans_l_historique(): void
     {
         $service = $this->service('Cardiologie');
         $secretaire = $this->secretaire($service->id);
         $medecin = $this->medecin($service->id);
-        $jourPasse = Carbon::now()->subDay()->toDateString();
+        $passé = Carbon::now()->subDay()->toDateString();
+        $avenir = Carbon::now()->addDay()->toDateString();
+
+        $dispoPassee = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $passé,
+            'heure_debut' => '09:00',
+            'heure_fin' => '11:00',
+            'active' => true,
+        ]);
+
+        $dispoFutur = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $avenir,
+            'heure_debut' => '09:00',
+            'heure_fin' => '11:00',
+            'active' => true,
+        ]);
 
         Livewire::actingAs($secretaire)
             ->test(Disponibilites::class)
-            ->set('medecinId', $medecin->id)
-            ->set('jour', $jourPasse)
-            ->set('heure_debut', '09:00')
-            ->set('heure_fin', '10:00')
-            ->call('ajouter')
-            ->assertSet('messageErreur', 'La date choisie est déjà passée.');
+            ->set('onglet', 'principal')
+            ->assertSee(Carbon::parse($dispoFutur->jour)->format('d/m/Y'))
+            ->assertDontSee(Carbon::parse($dispoPassee->jour)->format('d/m/Y'))
+            ->set('onglet', 'historique')
+            ->assertSee(Carbon::parse($dispoPassee->jour)->format('d/m/Y'))
+            ->assertSee(substr((string) $dispoPassee->heure_debut, 0, 5));
+    }
 
-        $this->assertDatabaseCount('disponibilites', 0);
+    public function test_aujourd_hui_creneau_fin_passee_masque_creneau_fin_future_visible(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        Carbon::setTestNow(Carbon::create(2026, 10, 22, 10, 0, 0, config('app.timezone')));
+        $jour = Carbon::now()->toDateString();
+
+        $dispoFinPassee = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '08:00',
+            'heure_fin' => '09:00',
+            'active' => true,
+        ]);
+
+        $dispoFinFuture = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '10:30',
+            'heure_fin' => '11:30',
+            'active' => true,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->set('onglet', 'principal')
+            ->assertSee(substr((string) $dispoFinFuture->heure_debut, 0, 5))
+            ->assertDontSee(substr((string) $dispoFinPassee->heure_debut, 0, 5));
+
+        Carbon::setTestNow();
+    }
+
+    public function test_modifier_un_creneau_libre_et_futur_est_accepte(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $jour = Carbon::now()->addDays(2)->toDateString();
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '11:00',
+            'active' => true,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('modifier', $dispo->id)
+            ->set('heure_debut', '10:00')
+            ->set('heure_fin', '12:00')
+            ->call('ajouter')
+            ->assertSet('messageErreur', null)
+            ->assertSet('messageSucces', 'Disponibilité modifiée.');
+
+        $dispo->refresh();
+        $this->assertSame('10:00', substr((string) $dispo->heure_debut, 0, 5));
+        $this->assertSame('12:00', substr((string) $dispo->heure_fin, 0, 5));
+    }
+
+    public function test_modifier_avec_rdv_demande_est_refuse_avec_message_exact(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+        $jour = Carbon::now()->addDays(2)->toDateString();
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '12:00',
+            'active' => true,
+        ]);
+
+        RendezVous::create([
+            'patient_id' => $patient->id,
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'date' => $jour,
+            'heure_debut' => '09:30',
+            'duree_prevue' => 30,
+            'statut' => RendezVous::STATUT_DEMANDE,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('modifier', $dispo->id)
+            ->assertSet('messageErreur', 'Ce créneau est déjà pris par un patient, il ne peut pas être modifié.');
+    }
+
+    public function test_modifier_avec_rdv_valide_est_refuse_avec_message_exact(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+        $jour = Carbon::now()->addDays(2)->toDateString();
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '12:00',
+            'active' => true,
+        ]);
+
+        RendezVous::create([
+            'patient_id' => $patient->id,
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'date' => $jour,
+            'heure_debut' => '10:00',
+            'duree_prevue' => 30,
+            'statut' => RendezVous::STATUT_VALIDE,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('modifier', $dispo->id)
+            ->assertSet('messageErreur', 'Ce créneau est déjà pris par un patient, il ne peut pas être modifié.');
+    }
+
+    public function test_rdv_annule_ne_bloque_pas_la_modification(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+        $jour = Carbon::now()->addDays(2)->toDateString();
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '12:00',
+            'active' => true,
+        ]);
+
+        RendezVous::create([
+            'patient_id' => $patient->id,
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'date' => $jour,
+            'heure_debut' => '09:30',
+            'duree_prevue' => 30,
+            'statut' => RendezVous::STATUT_ANNULE,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('modifier', $dispo->id)
+            ->assertSet('messageErreur', null)
+            ->set('heure_fin', '13:00')
+            ->call('ajouter')
+            ->assertSet('messageErreur', null)
+            ->assertSet('messageSucces', 'Disponibilité modifiée.');
+
+        $dispo->refresh();
+        $this->assertSame('13:00', substr((string) $dispo->heure_fin, 0, 5));
+    }
+
+    public function test_modifier_un_creneau_passe_refuse_y_compris_par_appel_direct(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $jour = Carbon::now()->subDay()->toDateString();
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '11:00',
+            'active' => true,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('modifier', $dispo->id)
+            ->assertSet('messageErreur', 'Impossible de modifier une disponibilité passée.');
+    }
+
+    public function test_chevauchement_avec_autre_disponibilite_active_refuse_sans_faux_conflit_avec_soi_meme(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $jour = Carbon::now()->addDays(2)->toDateString();
+
+        Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '14:00',
+            'heure_fin' => '16:00',
+            'active' => true,
+        ]);
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '11:00',
+            'active' => true,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('modifier', $dispo->id)
+            ->set('heure_debut', '13:00')
+            ->set('heure_fin', '15:00')
+            ->call('ajouter')
+            ->assertSet('messageErreur', 'Une disponibilité existe déjà sur cette plage horaire.');
+
+        // Modification sans changement ne crée pas de faux conflit
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('modifier', $dispo->id)
+            ->call('ajouter')
+            ->assertSet('messageErreur', null);
+    }
+
+    public function test_chevauchement_partiel_rdv_30_min_commence_a_1145_dans_9h12h_est_pris(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+        $jour = Carbon::now()->addDays(2)->toDateString();
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '12:00',
+            'active' => true,
+        ]);
+
+        RendezVous::create([
+            'patient_id' => $patient->id,
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'date' => $jour,
+            'heure_debut' => '11:45',
+            'duree_prevue' => 30,
+            'statut' => RendezVous::STATUT_VALIDE,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('modifier', $dispo->id)
+            ->assertSet('messageErreur', 'Ce créneau est déjà pris par un patient, il ne peut pas être modifié.');
+    }
+
+    public function test_desactiver_avec_rdv_actif_refuse_avec_message_exact(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+        $jour = Carbon::now()->addDays(2)->toDateString();
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '12:00',
+            'active' => true,
+        ]);
+
+        RendezVous::create([
+            'patient_id' => $patient->id,
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'date' => $jour,
+            'heure_debut' => '09:30',
+            'duree_prevue' => 30,
+            'statut' => RendezVous::STATUT_DEMANDE,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('basculer', $dispo->id)
+            ->assertSet('messageErreur', "Des rendez-vous sont liés à ce créneau. Annulez-les d'abord.");
+
+        $dispo->refresh();
+        $this->assertTrue($dispo->active);
+    }
+
+    public function test_desactiver_sans_rdv_actif_est_accepte(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $jour = Carbon::now()->addDays(2)->toDateString();
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '12:00',
+            'active' => true,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('basculer', $dispo->id)
+            ->assertSet('messageErreur', null);
+
+        $dispo->refresh();
+        $this->assertFalse($dispo->active);
+    }
+
+    public function test_rdv_cree_apres_ouverture_formulaire_est_refuse_a_l_enregistrement(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+        $jour = Carbon::now()->addDays(2)->toDateString();
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '12:00',
+            'active' => true,
+        ]);
+
+        $composant = Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('modifier', $dispo->id)
+            ->assertSet('messageErreur', null)
+            ->set('heure_fin', '13:00');
+
+        RendezVous::create([
+            'patient_id' => $patient->id,
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'date' => $jour,
+            'heure_debut' => '09:30',
+            'duree_prevue' => 30,
+            'statut' => RendezVous::STATUT_DEMANDE,
+        ]);
+
+        $composant->call('ajouter')
+            ->assertSet('messageErreur', 'Ce créneau est déjà pris par un patient, il ne peut pas être modifié.');
+
+        $dispo->refresh();
+        $this->assertSame('12:00', substr((string) $dispo->heure_fin, 0, 5));
+    }
+
+    public function test_reactiver_refuse_en_cas_de_chevauchement_avec_autre_disponibilite_active(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $jour = Carbon::now()->addDays(2)->toDateString();
+
+        $dispoActive = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '12:00',
+            'active' => true,
+        ]);
+
+        $dispoInactive = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '10:00',
+            'heure_fin' => '11:00',
+            'active' => false,
+        ]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->call('basculer', $dispoInactive->id)
+            ->assertSet('messageErreur', 'Une disponibilité existe déjà sur cette plage horaire.');
+
+        $dispoInactive->refresh();
+        $this->assertFalse($dispoInactive->active);
+
+        unset($dispoActive, $dispoInactive);
+    }
+
+    public function test_disponibilites_passees_restent_en_base_et_apparaissent_dans_historique(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $passé = Carbon::now()->subDays(3)->toDateString();
+
+        $dispoPassee = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $passé,
+            'heure_debut' => '08:00',
+            'heure_fin' => '09:00',
+            'active' => true,
+        ]);
+
+        $this->assertDatabaseHas('disponibilites', ['id' => $dispoPassee->id]);
+
+        Livewire::actingAs($secretaire)
+            ->test(Disponibilites::class)
+            ->set('onglet', 'principal')
+            ->assertDontSee($dispoPassee->heure_debut)
+            ->set('onglet', 'historique')
+            ->assertSee($dispoPassee->heure_debut);
+
+        $this->assertDatabaseHas('disponibilites', ['id' => $dispoPassee->id]);
     }
 }

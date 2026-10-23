@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Patient;
 
+use App\Models\FileEntree;
 use App\Models\RendezVous;
 use App\Services\FileAttenteService;
 use Carbon\Carbon;
@@ -40,8 +41,13 @@ class Dashboard extends Component
             ->filter(fn (RendezVous $rdv) => $rdv->statut === RendezVous::STATUT_VALIDE && $momentRdv($rdv)->lessThan($maintenant))
             ->count();
 
-        $positionFile = $user->service_id
-            ? $fileService->getPositionPatient($user->id, $user->service_id)
+        $entree = $fileService->getEntreePatient($user->id);
+
+        $positionFile = $entree && in_array($entree->statut, [
+            FileEntree::STATUT_EN_ATTENTE,
+            FileEntree::STATUT_EN_COURS,
+        ], true)
+            ? $entree->position
             : null;
 
         return view('livewire.patient.dashboard', [
