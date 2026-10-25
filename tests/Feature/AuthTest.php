@@ -49,6 +49,7 @@ class AuthTest extends TestCase
         Livewire::test(RegisterPatient::class)
             ->set('name', 'Awa Diop')
             ->set('email', 'awa@example.com')
+            ->set('telephone', '+221 77 123 45 67')
             ->set('password', 'motdepasse123')
             ->set('password_confirmation', 'motdepasse123')
             ->call('register')
@@ -58,6 +59,7 @@ class AuthTest extends TestCase
 
         $this->assertNotNull($user);
         $this->assertSame('En attente', $user->statut_compte);
+        $this->assertSame('771234567', $user->telephone);
         $this->assertTrue($user->hasRole('Patient'));
     }
 

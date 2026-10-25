@@ -54,7 +54,7 @@
                 </span>
                 <div class="min-w-0 flex-1">
                     <h2 class="text-lg font-semibold text-[#0F172A]">Informations personnelles</h2>
-                    <p class="mt-1 text-sm text-[#475569]">Mettez à jour votre nom complet et votre adresse e-mail.</p>
+                    <p class="mt-1 text-sm text-[#475569]">Mettez à jour votre nom complet, votre adresse e-mail et votre numéro de téléphone.</p>
                 </div>
             </div>
 
@@ -91,6 +91,21 @@
                                    placeholder="votre@email.sn">
                         </div>
                         @error('email') <p class="mt-1 text-xs text-[#B91C1C]">{{ $message }}</p> @enderror
+                    </div>
+
+                    <div>
+                        <x-label for="telephone">Téléphone (facultatif)</x-label>
+                        <div class="relative mt-2">
+                            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400" aria-hidden="true">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                                </svg>
+                            </div>
+                            <input type="tel" id="telephone" wire:model="telephone" autocomplete="tel" inputmode="tel"
+                                   class="block w-full min-w-0 rounded-lg border border-slate-300 bg-white pl-10 pr-3 py-3 text-base text-[#0F172A] placeholder:text-slate-500 transition duration-150 ease-out focus:border-[#0F766E] focus:outline-none focus:ring-2 focus:ring-[#0F766E]/20 motion-reduce:transition-none sm:text-sm"
+                                   placeholder="7X XXX XX XX">
+                        </div>
+                        @error('telephone') <p class="mt-1 text-xs text-[#B91C1C]">{{ $message }}</p> @enderror
                     </div>
                 </div>
 

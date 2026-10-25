@@ -70,6 +70,17 @@
                         @enderror
                     </div>
 
+                    {{-- Téléphone --}}
+                    <div>
+                        <label for="telephone" class="block text-sm font-medium text-slate-700">Numéro de téléphone</label>
+                        <input id="telephone" type="tel" wire:model="telephone" autocomplete="tel" inputmode="tel" required
+                               placeholder="7X XXX XX XX"
+                               class="mt-2 h-14 w-full rounded-xl border bg-slate-50 px-4 text-base text-slate-900 placeholder:text-slate-500 focus:border-[#0F766E] focus:outline-none focus:ring-2 focus:ring-[#0F766E]/30 @error('telephone') border-red-600 @else border-slate-300 @enderror">
+                        @error('telephone')
+                            <p role="alert" class="mt-2 text-sm font-medium text-red-700">{{ $message }}</p>
+                        @enderror
+                    </div>
+
                     {{-- Mot de passe --}}
                     <div>
                         <label for="password" class="block text-sm font-medium text-slate-700">Mot de passe</label>

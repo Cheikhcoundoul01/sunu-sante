@@ -3,6 +3,7 @@
 namespace App\Livewire\Patient;
 
 use App\Models\User;
+use App\Rules\TelephoneSenegal;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Livewire\Component;
@@ -11,6 +12,7 @@ class MonProfil extends Component
 {
     public string $name = '';
     public string $email = '';
+    public ?string $telephone = null;
     public string $currentPassword = '';
     public string $password = '';
     public string $password_confirmation = '';
@@ -23,6 +25,7 @@ class MonProfil extends Component
         $user = auth()->user();
         $this->name = $user->name;
         $this->email = $user->email;
+        $this->telephone = $user->telephone;
     }
 
     public function mettreAJourProfil(): void
@@ -30,6 +33,7 @@ class MonProfil extends Component
         $this->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,' . auth()->id(),
+            'telephone' => ['nullable', 'string', new TelephoneSenegal],
         ]);
 
         $this->messageErreur = null;
@@ -39,8 +43,10 @@ class MonProfil extends Component
             auth()->user()->update([
                 'name' => $this->name,
                 'email' => $this->email,
+                'telephone' => TelephoneSenegal::normaliser($this->telephone),
             ]);
 
+            $this->telephone = auth()->user()->telephone;
             $this->messageSucces = 'Profil mis à jour.';
         } catch (\Exception $e) {
             report($e);
