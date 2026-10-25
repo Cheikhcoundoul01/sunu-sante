@@ -60,8 +60,7 @@
                 @forelse ($rdvs as $rdv)
                     <tr wire:key="rdv-{{ $rdv->id }}">
                         <td class="px-4 py-3 text-sm text-slate-900">
-                            {{ $rdv->patient->name }}<br>
-                            <span class="text-xs text-slate-500">{{ $rdv->patient->email }}</span>
+                            {{ $rdv->patient->name }}
                         </td>
                         <td class="px-4 py-3 text-sm text-slate-600">{{ $rdv->medecin->nomAffiche }}</td>
                         <td class="px-4 py-3 text-sm text-slate-600">

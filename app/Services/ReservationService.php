@@ -38,6 +38,7 @@ class ReservationService
             return DB::transaction(function () use ($patient, $medecinId, $date, $heureDebut, $motif) {
                 $medecin = User::role('Médecin')
                     ->whereKey($medecinId)
+                    ->where('statut_compte', 'Actif')
                     ->lockForUpdate()
                     ->firstOrFail();
 
@@ -99,6 +100,7 @@ class ReservationService
 
                 $nouveauMedecin = User::role('Médecin')
                     ->whereKey($nouveauMedecinId)
+                    ->where('statut_compte', 'Actif')
                     ->lockForUpdate()
                     ->firstOrFail();
 

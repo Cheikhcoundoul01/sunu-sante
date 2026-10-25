@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Secretaire;
 
+use App\Exceptions\RendezVousDejaTraiteException;
 use App\Mail\RendezVousAnnule;
 use App\Mail\RendezVousValide;
 use App\Models\RendezVous;
@@ -66,15 +67,30 @@ class RendezVousSecretaire extends Component
         }
 
         try {
-            DB::transaction(function () use ($rdv) {
-                $rdv->update(['statut' => RendezVous::STATUT_VALIDE]);
+            $rdv = DB::transaction(function () use ($id) {
+                $verrou = RendezVous::whereKey($id)
+                    ->whereIn('service_id', $this->servicesAutorises())
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $verrou || $verrou->statut !== RendezVous::STATUT_DEMANDE) {
+                    throw new RendezVousDejaTraiteException();
+                }
+
+                $verrou->update(['statut' => RendezVous::STATUT_VALIDE]);
 
                 activity()
                     ->causedBy(auth()->user())
-                    ->performedOn($rdv)
+                    ->performedOn($verrou)
                     ->event('validation_rendez_vous')
                     ->log('Rendez-vous validé par la secrétaire');
+
+                return $verrou;
             });
+        } catch (RendezVousDejaTraiteException $e) {
+            $this->messageErreur = $e->getMessage();
+
+            return;
         } catch (\Throwable $e) {
             report($e);
             $this->messageErreur = 'Une erreur inattendue est survenue lors de la validation du rendez-vous.';
@@ -118,15 +134,30 @@ class RendezVousSecretaire extends Component
         }
 
         try {
-            DB::transaction(function () use ($rdv) {
-                $rdv->update(['statut' => RendezVous::STATUT_ANNULE]);
+            $rdv = DB::transaction(function () use ($id) {
+                $verrou = RendezVous::whereKey($id)
+                    ->whereIn('service_id', $this->servicesAutorises())
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $verrou || $verrou->statut !== RendezVous::STATUT_DEMANDE) {
+                    throw new RendezVousDejaTraiteException();
+                }
+
+                $verrou->update(['statut' => RendezVous::STATUT_ANNULE]);
 
                 activity()
                     ->causedBy(auth()->user())
-                    ->performedOn($rdv)
+                    ->performedOn($verrou)
                     ->event('rejet_rendez_vous')
                     ->log('Rendez-vous rejeté par la secrétaire');
+
+                return $verrou;
             });
+        } catch (RendezVousDejaTraiteException $e) {
+            $this->messageErreur = $e->getMessage();
+
+            return;
         } catch (\Throwable $e) {
             report($e);
             $this->messageErreur = 'Une erreur inattendue est survenue lors du rejet de la demande de rendez-vous.';

@@ -65,6 +65,32 @@ class PatientValidationTest extends TestCase
         $this->actingAs($medecin)->get('/secretaire/patients')->assertStatus(403);
     }
 
+    public function test_email_patient_affiche_uniquement_pour_les_comptes_en_attente(): void
+    {
+        $enAttente = $this->patientEnAttente();
+
+        $valide = User::factory()->create([
+            'email' => 'patient.valide@example.com',
+            'statut_compte' => 'Actif',
+        ]);
+        $valide->assignRole('Patient');
+
+        $rejete = User::factory()->create([
+            'email' => 'patient.rejete@example.com',
+            'statut_compte' => 'Rejeté',
+        ]);
+        $rejete->assignRole('Patient');
+
+        Livewire::actingAs($this->secretaire())
+            ->test(Patients::class)
+            ->set('filtre', 'Tous')
+            ->assertSee($enAttente->email)
+            ->assertSee($valide->name)
+            ->assertDontSee($valide->email)
+            ->assertSee($rejete->name)
+            ->assertDontSee($rejete->email);
+    }
+
     public function test_validation_activates_account_records_decision_sends_email_and_logs(): void
     {
         Mail::fake();
@@ -162,6 +188,23 @@ class PatientValidationTest extends TestCase
 
         Mail::assertSentCount(1);
         Mail::assertNotSent(ComptePatientRejete::class);
+    }
+
+    public function test_journalisation_ne_conserve_pas_les_emails(): void
+    {
+        Mail::fake();
+
+        $secretaire = $this->secretaire();
+        $patient = $this->patientEnAttente();
+
+        app(PatientAccountService::class)->valider($patient, $secretaire);
+
+        $activite = \Spatie\Activitylog\Models\Activity::where('event', 'validation_compte_patient')->firstOrFail();
+        $proprietes = $activite->properties->toArray();
+
+        $this->assertSame(['statut' => 'Actif'], $proprietes);
+        $this->assertStringNotContainsString($patient->email, json_encode($proprietes));
+        $this->assertStringNotContainsString($secretaire->email, json_encode($proprietes));
     }
 
     public function test_only_one_activity_is_logged_per_decision(): void

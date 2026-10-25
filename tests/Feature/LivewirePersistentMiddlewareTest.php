@@ -108,6 +108,34 @@ class LivewirePersistentMiddlewareTest extends TestCase
         $this->assertFalse($service->fresh()->actif);
     }
 
+    public function test_une_requete_livewire_est_refusee_apres_retrait_du_role(): void
+    {
+        $admin = $this->admin();
+
+        $html = $this->actingAs($admin)->get('/admin/services')->assertStatus(200)->getContent();
+        $snapshot = $this->snapshotFrom($html);
+
+        $admin->removeRole('Administrateur');
+
+        $response = $this->postJson(
+            '/livewire/update',
+            [
+                'components' => [[
+                    'snapshot' => $snapshot,
+                    'updates' => [],
+                    'calls' => [[
+                        'path' => '',
+                        'method' => 'annulerEdition',
+                        'params' => [],
+                    ]],
+                ]],
+            ],
+            ['X-Livewire' => 'true']
+        );
+
+        $response->assertForbidden();
+    }
+
     /** D. Les autorisations existantes restent appliquées sur les requêtes Livewire. */
     public function test_les_autorisations_existantes_sont_preservees(): void
     {

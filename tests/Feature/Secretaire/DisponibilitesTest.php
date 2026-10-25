@@ -734,4 +734,42 @@ class DisponibilitesTest extends TestCase
 
         $this->assertDatabaseHas('disponibilites', ['id' => $dispoPassee->id]);
     }
+
+    public function test_erreur_technique_basculer_n_expose_pas_le_message_brut(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $jour = Carbon::now()->addDay()->toDateString();
+
+        $dispo = Disponibilite::create([
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'jour' => $jour,
+            'heure_debut' => '09:00',
+            'heure_fin' => '12:00',
+            'active' => true,
+        ]);
+
+        $cle = 'eloquent.updating: ' . Disponibilite::class;
+        $dispatcher = Disponibilite::getEventDispatcher();
+
+        $this->assertCount(0, $dispatcher->getListeners($cle));
+
+        Disponibilite::updating(function () {
+            throw new \RuntimeException('SQLSTATE[HY000] secret interne');
+        });
+
+        try {
+            Livewire::actingAs($secretaire)
+                ->test(Disponibilites::class)
+                ->call('basculer', $dispo->id)
+                ->assertSet('messageErreur', 'Une erreur est survenue lors du changement de statut de la disponibilité. Veuillez réessayer.')
+                ->assertDontSee('SQLSTATE');
+        } finally {
+            $dispatcher->forget($cle);
+        }
+
+        $this->assertTrue($dispo->fresh()->active);
+    }
 }

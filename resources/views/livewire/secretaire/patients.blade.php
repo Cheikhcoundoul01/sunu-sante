@@ -39,7 +39,9 @@
                 @forelse ($patients as $patient)
                     <tr wire:key="patient-{{ $patient->id }}">
                         <td class="px-4 py-3 text-sm text-slate-900">{{ $patient->name }}</td>
-                        <td class="px-4 py-3 text-sm text-slate-600">{{ $patient->email }}</td>
+                        <td class="px-4 py-3 text-sm text-slate-600">
+                            {{ $patient->statut_compte === 'En attente' ? $patient->email : '—' }}
+                        </td>
                         <td class="px-4 py-3 text-sm">
                             @if ($patient->statut_compte === 'Actif')
                                 <span class="inline-flex rounded-full bg-teal-50 px-2 py-1 text-xs font-medium text-teal-800">Actif</span>

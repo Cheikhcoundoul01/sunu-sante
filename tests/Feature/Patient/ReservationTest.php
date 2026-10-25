@@ -124,6 +124,51 @@ class ReservationTest extends TestCase
         Mail::assertNothingSent();
     }
 
+    public function test_medecin_inactif_est_absent_des_medecins_proposes(): void
+    {
+        $service = $this->service('Cardiologie');
+        $actif = $this->medecin($service->id);
+        $inactif = User::factory()->create(['statut_compte' => 'Rejeté', 'service_id' => $service->id]);
+        $inactif->assignRole('Médecin');
+
+        $component = Livewire::actingAs($this->patient())
+            ->test(\App\Livewire\Patient\PrendreRendezVous::class)
+            ->set('serviceId', $service->id);
+
+        $medecins = $component->viewData('medecins');
+
+        $this->assertTrue($medecins->contains(fn ($medecin) => $medecin->id === $actif->id));
+        $this->assertFalse($medecins->contains(fn ($medecin) => $medecin->id === $inactif->id));
+    }
+
+    public function test_medecin_inactif_ne_peut_pas_etre_choisi_cote_serveur(): void
+    {
+        Mail::fake();
+
+        $service = $this->service('Cardiologie');
+        $inactif = User::factory()->create(['statut_compte' => 'Rejeté', 'service_id' => $service->id]);
+        $inactif->assignRole('Médecin');
+        $patient = $this->patient();
+
+        $jour = Carbon::now()->addDay()->toDateString();
+        $this->disponibilite($inactif->id, $service->id, $jour, '09:00', '12:00');
+
+        Livewire::actingAs($patient)
+            ->test(\App\Livewire\Patient\PrendreRendezVous::class)
+            ->set('serviceId', $service->id)
+            ->set('medecinId', $inactif->id)
+            ->set('date', $jour)
+            ->set('heureDebut', '09:30')
+            ->call('reserver')
+            ->assertSet('messageSucces', null)
+            ->assertSet('messageErreur', 'Une erreur est survenue lors de la demande de rendez-vous. Veuillez réessayer.');
+
+        $this->assertDatabaseMissing('rendez_vouses', [
+            'patient_id' => $patient->id,
+            'medecin_id' => $inactif->id,
+        ]);
+    }
+
     public function test_conflit_creneau_deja_pris(): void
     {
         $service = $this->service('Cardiologie');

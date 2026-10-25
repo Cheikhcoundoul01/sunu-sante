@@ -108,7 +108,11 @@ class PrendreRendezVous extends Component
         $services = Service::query()->where('actif', true)->orderBy('nom')->get();
 
         $medecins = $this->serviceId
-            ? User::role('Médecin')->where('service_id', $this->serviceId)->orderBy('name')->get()
+            ? User::role('Médecin')
+                ->where('service_id', $this->serviceId)
+                ->where('statut_compte', 'Actif')
+                ->orderBy('name')
+                ->get()
             : collect();
 
         $creneauxDisponibles = collect();

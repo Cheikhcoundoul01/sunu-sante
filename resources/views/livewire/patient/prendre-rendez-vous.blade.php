@@ -239,7 +239,7 @@
                                       placeholder="Ex : consultation de routine, douleur…"
                                       class="block w-full resize-none rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/30"></textarea>
                             <div class="mt-1 flex items-center justify-between text-xs text-slate-500">
-                                <span>Précisions facultatives.</span>
+                                <span>Indiquez brièvement la raison, sans détails médicaux sensibles.</span>
                                 <span aria-hidden="true"><span x-text="n">0</span>/500</span>
                             </div>
                         </div>

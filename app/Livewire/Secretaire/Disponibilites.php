@@ -394,7 +394,10 @@ class Disponibilites extends Component
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
-            $this->messageErreur = $e->getMessage();
+            $this->messageErreur = $this->messageErreurAffiche(
+                $e,
+                'Une erreur est survenue lors de la modification de la disponibilité. Veuillez réessayer.'
+            );
 
             return;
         }
@@ -493,7 +496,10 @@ class Disponibilites extends Component
 
             return;
         } catch (\Throwable $e) {
-            $this->messageErreur = $e->getMessage();
+            $this->messageErreur = $this->messageErreurAffiche(
+                $e,
+                'Une erreur est survenue lors du changement de statut de la disponibilité. Veuillez réessayer.'
+            );
 
             return;
         }
@@ -502,6 +508,36 @@ class Disponibilites extends Component
         $this->messageSucces = $dispoActualisee && $dispoActualisee->active
             ? 'Disponibilité réactivée.'
             : 'Disponibilité désactivée.';
+    }
+
+    /**
+     * Messages métier connus, seuls autorisés à l'affichage.
+     *
+     * @return array<int, string>
+     */
+    private function messagesMetier(): array
+    {
+        return [
+            'Médecin introuvable.',
+            'Disponibilité introuvable dans votre service.',
+            'Impossible de modifier une disponibilité passée.',
+            'Ce créneau est déjà pris par un patient, il ne peut pas être modifié.',
+            'Une disponibilité existe déjà sur cette plage horaire.',
+            "Des rendez-vous sont liés à ce créneau. Annulez-les d'abord.",
+        ];
+    }
+
+    private function messageErreurAffiche(\Throwable $e, string $messageParDefaut): string
+    {
+        $message = $e->getMessage();
+
+        if (in_array($message, $this->messagesMetier(), true)) {
+            return $message;
+        }
+
+        report($e);
+
+        return $messageParDefaut;
     }
 
     public function render(CreneauService $creneaux)

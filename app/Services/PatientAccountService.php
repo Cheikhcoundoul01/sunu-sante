@@ -60,8 +60,6 @@ class PatientAccountService
                 ->event($nouveauStatut === 'Actif' ? 'validation_compte_patient' : 'rejet_compte_patient')
                 ->withProperties([
                     'statut' => $nouveauStatut,
-                    'patient_email' => $dossier->email,
-                    'traite_par' => $secretaire->email,
                 ])
                 ->log($nouveauStatut === 'Actif'
                     ? 'Validation du compte patient'

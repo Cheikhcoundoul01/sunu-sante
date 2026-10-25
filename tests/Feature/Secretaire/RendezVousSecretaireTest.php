@@ -66,6 +66,41 @@ class RendezVousSecretaireTest extends TestCase
         }
     }
 
+    /**
+     * Simule une autre secrétaire qui traite le rendez-vous après la lecture
+     * initiale du composant, mais avant le verrou de la transaction.
+     */
+    private function simulerDecisionConcurrente(RendezVous $rdv, string $statutConcurrent, callable $test): void
+    {
+        $cle = 'eloquent.retrieved: ' . RendezVous::class;
+        $dispatcher = RendezVous::getEventDispatcher();
+
+        $this->assertCount(
+            0,
+            $dispatcher->getListeners($cle),
+            'Un écouteur préexistant a été détecté sur ' . $cle . ' : nettoyage ciblé impossible sans le supprimer.'
+        );
+
+        $dejaApplique = false;
+
+        RendezVous::retrieved(function (RendezVous $retrouve) use ($rdv, $statutConcurrent, &$dejaApplique) {
+            if ($dejaApplique || $retrouve->getKey() !== $rdv->getKey()) {
+                return;
+            }
+
+            $dejaApplique = true;
+
+            RendezVous::whereKey($retrouve->getKey())->update(['statut' => $statutConcurrent]);
+        });
+
+        try {
+            $test();
+            $this->assertTrue($dejaApplique, 'La décision concurrente simulée n\'a pas été appliquée.');
+        } finally {
+            $dispatcher->forget($cle);
+        }
+    }
+
     protected function service(string $nom): Service
     {
         return Service::create(['nom' => $nom, 'actif' => true]);
@@ -171,6 +206,26 @@ class RendezVousSecretaireTest extends TestCase
         $this->assertFalse($rdvs->contains(function ($rdv) use ($rdvB) {
             return $rdv->id === $rdvB->id;
         }));
+    }
+
+    public function test_liste_rendez_vous_n_affiche_pas_l_email_du_patient(): void
+    {
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = User::factory()->create([
+            'email' => 'patient.rdv@example.com',
+            'statut_compte' => 'Actif',
+        ]);
+        $patient->assignRole('Patient');
+
+        $rdv = $this->rdvDemande($patient, $medecin, $service);
+        $rdv->update(['motif' => 'Suivi cardiologique']);
+
+        Livewire::actingAs($secretaire)
+            ->test(\App\Livewire\Secretaire\RendezVousSecretaire::class)
+            ->assertSee('Suivi cardiologique')
+            ->assertDontSee('patient.rdv@example.com');
     }
 
     public function test_secretaire_peut_valider_rdv_demande(): void
@@ -341,6 +396,64 @@ class RendezVousSecretaireTest extends TestCase
 
         $rdv->refresh();
         $this->assertSame(RendezVous::STATUT_VALIDE, $rdv->statut);
+    }
+
+    public function test_valider_refuse_si_le_rdv_a_ete_rejete_entre_temps(): void
+    {
+        Mail::fake();
+
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+        $rdv = $this->rdvDemande($patient, $medecin, $service);
+
+        $component = Livewire::actingAs($secretaire)
+            ->test(\App\Livewire\Secretaire\RendezVousSecretaire::class);
+
+        $this->simulerDecisionConcurrente($rdv, RendezVous::STATUT_ANNULE, function () use ($component, $rdv) {
+            $component->call('valider', $rdv->id)
+                ->assertSet('messageSucces', null)
+                ->assertSet('messageErreur', 'Ce rendez-vous a déjà été traité.');
+        });
+
+        $rdv->refresh();
+        $this->assertSame(RendezVous::STATUT_ANNULE, $rdv->statut);
+
+        Mail::assertNothingSent();
+        $this->assertDatabaseMissing('activity_log', [
+            'event' => 'validation_rendez_vous',
+            'subject_id' => $rdv->id,
+        ]);
+    }
+
+    public function test_rejeter_refuse_si_le_rdv_a_ete_valide_entre_temps(): void
+    {
+        Mail::fake();
+
+        $service = $this->service('Cardiologie');
+        $secretaire = $this->secretaire($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+        $rdv = $this->rdvDemande($patient, $medecin, $service);
+
+        $component = Livewire::actingAs($secretaire)
+            ->test(\App\Livewire\Secretaire\RendezVousSecretaire::class);
+
+        $this->simulerDecisionConcurrente($rdv, RendezVous::STATUT_VALIDE, function () use ($component, $rdv) {
+            $component->call('rejeter', $rdv->id)
+                ->assertSet('messageSucces', null)
+                ->assertSet('messageErreur', 'Ce rendez-vous a déjà été traité.');
+        });
+
+        $rdv->refresh();
+        $this->assertSame(RendezVous::STATUT_VALIDE, $rdv->statut);
+
+        Mail::assertNothingSent();
+        $this->assertDatabaseMissing('activity_log', [
+            'event' => 'rejet_rendez_vous',
+            'subject_id' => $rdv->id,
+        ]);
     }
 
     public function test_secretaire_ne_peut_pas_traiter_rdv_autre_service(): void

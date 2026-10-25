@@ -15,6 +15,7 @@ use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class FileDuJourTest extends TestCase
@@ -312,6 +313,25 @@ class FileDuJourTest extends TestCase
         $this->assertSame(FileEntree::STATUT_ABSENT, $entree->statut);
     }
 
+    public function test_erreur_technique_generation_n_expose_pas_le_message_brut(): void
+    {
+        $service = $this->service('Cardiologie');
+        $agent = $this->agent($service->id);
+
+        $this->mock(FileAttenteService::class, function ($mock) {
+            $mock->shouldReceive('genererFileDuJour')
+                ->once()
+                ->andThrow(new \RuntimeException('SQLSTATE[HY000] secret interne'));
+            $mock->shouldReceive('getFileDuJour')->andReturn(collect());
+        });
+
+        Livewire::actingAs($agent)
+            ->test(\App\Livewire\Accueil\FileDuJour::class)
+            ->call('generer')
+            ->assertSet('messageErreur', 'Une erreur est survenue lors de la génération de la file. Veuillez réessayer.')
+            ->assertDontSee('SQLSTATE');
+    }
+
     public function test_agent_peut_remettre_en_attente_un_absent(): void
     {
         $service = $this->service('Cardiologie');
@@ -511,5 +531,126 @@ class FileDuJourTest extends TestCase
         $html = $component->html();
         $this->assertStringContainsString($patientA->name, $html);
         $this->assertStringNotContainsString($patientB->name, $html);
+    }
+
+    public function test_agent_ne_peut_pas_modifier_la_file_d_un_autre_service(): void
+    {
+        $serviceA = $this->service('Cardiologie');
+        $serviceB = $this->service('Pédiatrie');
+        $agentA = $this->agent($serviceA->id);
+        $medecinB = $this->medecin($serviceB->id);
+        $patient = $this->patient();
+
+        $jour = Carbon::now()->toDateString();
+        $this->disponibilite($medecinB->id, $serviceB->id, $jour, '09:00', '12:00');
+
+        $rdvB = RendezVous::create([
+            'patient_id' => $patient->id,
+            'medecin_id' => $medecinB->id,
+            'service_id' => $serviceB->id,
+            'date' => $jour,
+            'heure_debut' => '09:30',
+            'duree_prevue' => 30,
+            'statut' => RendezVous::STATUT_VALIDE,
+        ]);
+
+        app(FileAttenteService::class)->genererFileDuJour($serviceB->id);
+        $entreeB = FileEntree::where('rendez_vous_id', $rdvB->id)->firstOrFail();
+
+        $this->withoutExceptionHandling();
+
+        try {
+            Livewire::actingAs($agentA)
+                ->test(\App\Livewire\Accueil\FileDuJour::class)
+                ->call('demarrer', $entreeB->id);
+
+            $this->fail("L'agent ne doit pas pouvoir modifier la file d'un autre service.");
+        } catch (HttpException $e) {
+            $this->assertSame(403, $e->getStatusCode());
+        }
+
+        $this->assertSame(FileEntree::STATUT_EN_ATTENTE, $entreeB->fresh()->statut);
+    }
+
+    public function test_agent_ne_peut_pas_modifier_une_entree_dune_autre_date(): void
+    {
+        $service = $this->service('Cardiologie');
+        $agent = $this->agent($service->id);
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+
+        $jour = Carbon::now()->subDay()->toDateString();
+        $this->disponibilite($medecin->id, $service->id, $jour, '09:00', '12:00');
+
+        $rdv = RendezVous::create([
+            'patient_id' => $patient->id,
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'date' => $jour,
+            'heure_debut' => '09:30',
+            'duree_prevue' => 30,
+            'statut' => RendezVous::STATUT_VALIDE,
+        ]);
+
+        app(FileAttenteService::class)->genererFileDuJour($service->id, Carbon::now()->subDay());
+        $entree = FileEntree::where('rendez_vous_id', $rdv->id)->firstOrFail();
+
+        $this->withoutExceptionHandling();
+
+        try {
+            Livewire::actingAs($agent)
+                ->test(\App\Livewire\Accueil\FileDuJour::class)
+                ->call('demarrer', $entree->id);
+
+            $this->fail("L'agent ne doit pas pouvoir modifier une entrée d'une autre date.");
+        } catch (HttpException $e) {
+            $this->assertSame(403, $e->getStatusCode());
+        }
+
+        $this->assertSame(FileEntree::STATUT_EN_ATTENTE, $entree->fresh()->statut);
+    }
+
+    public function test_remettre_en_attente_exige_la_permission_file_gerer(): void
+    {
+        $service = $this->service('Cardiologie');
+        $medecin = $this->medecin($service->id);
+        $patient = $this->patient();
+
+        $jour = Carbon::now()->toDateString();
+        $this->disponibilite($medecin->id, $service->id, $jour, '09:00', '12:00');
+
+        $rdv = RendezVous::create([
+            'patient_id' => $patient->id,
+            'medecin_id' => $medecin->id,
+            'service_id' => $service->id,
+            'date' => $jour,
+            'heure_debut' => '09:30',
+            'duree_prevue' => 30,
+            'statut' => RendezVous::STATUT_VALIDE,
+        ]);
+
+        app(FileAttenteService::class)->genererFileDuJour($service->id);
+        $entree = FileEntree::where('rendez_vous_id', $rdv->id)->firstOrFail();
+        app(FileAttenteService::class)->changerStatut($entree->id, FileEntree::STATUT_ABSENT);
+
+        $utilisateur = User::factory()->create([
+            'statut_compte' => 'Actif',
+            'service_id' => $service->id,
+        ]);
+        $utilisateur->givePermissionTo('file.voir');
+
+        $this->withoutExceptionHandling();
+
+        try {
+            Livewire::actingAs($utilisateur)
+                ->test(\App\Livewire\Accueil\FileDuJour::class)
+                ->call('remettreEnAttente', $entree->id);
+
+            $this->fail('La permission file.gerer est obligatoire pour remettre un patient en attente.');
+        } catch (HttpException $e) {
+            $this->assertSame(403, $e->getStatusCode());
+        }
+
+        $this->assertSame(FileEntree::STATUT_ABSENT, $entree->fresh()->statut);
     }
 }

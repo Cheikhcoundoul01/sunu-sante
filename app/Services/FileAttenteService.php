@@ -98,10 +98,15 @@ class FileAttenteService
      * Change le statut d'une entrée de file (agent d'accueil uniquement).
      * Vérifie les transitions autorisées.
      */
-    public function changerStatut(int $fileEntreeId, string $nouveauStatut, ?string $motifPriorite = null): FileEntree
-    {
-        return DB::transaction(function () use ($fileEntreeId, $nouveauStatut, $motifPriorite) {
-            $entree = FileEntree::whereKey($fileEntreeId)->lockForUpdate()->firstOrFail();
+    public function changerStatut(
+        int $fileEntreeId,
+        string $nouveauStatut,
+        ?string $motifPriorite = null,
+        ?int $serviceId = null,
+        ?CarbonInterface $date = null
+    ): FileEntree {
+        return DB::transaction(function () use ($fileEntreeId, $nouveauStatut, $motifPriorite, $serviceId, $date) {
+            $entree = $this->entreeVerrouillee($fileEntreeId, $serviceId, $date);
 
             if (! $entree->peutTransitionnerVers($nouveauStatut)) {
                 throw new \Exception("Transition non autorisée de {$entree->statut} vers $nouveauStatut");
@@ -152,14 +157,18 @@ class FileAttenteService
      * Fait passer un patient en priorité (agent d'accueil uniquement).
      * Motif obligatoire.
      */
-    public function passerPrioritaire(int $fileEntreeId, string $motif): FileEntree
-    {
+    public function passerPrioritaire(
+        int $fileEntreeId,
+        string $motif,
+        ?int $serviceId = null,
+        ?CarbonInterface $date = null
+    ): FileEntree {
         if (empty(trim($motif))) {
             throw new \Exception('Le motif est obligatoire pour un passage prioritaire');
         }
 
-        return DB::transaction(function () use ($fileEntreeId, $motif) {
-            $entree = FileEntree::whereKey($fileEntreeId)->lockForUpdate()->firstOrFail();
+        return DB::transaction(function () use ($fileEntreeId, $motif, $serviceId, $date) {
+            $entree = $this->entreeVerrouillee($fileEntreeId, $serviceId, $date);
 
             if (! $entree->estEnAttente()) {
                 throw new \Exception('Seuls les patients en attente peuvent passer en priorité');
@@ -187,10 +196,13 @@ class FileAttenteService
     /**
      * Remet un patient absent en attente (fin de file).
      */
-    public function remettreEnAttente(int $fileEntreeId): FileEntree
-    {
-        return DB::transaction(function () use ($fileEntreeId) {
-            $entree = FileEntree::whereKey($fileEntreeId)->lockForUpdate()->firstOrFail();
+    public function remettreEnAttente(
+        int $fileEntreeId,
+        ?int $serviceId = null,
+        ?CarbonInterface $date = null
+    ): FileEntree {
+        return DB::transaction(function () use ($fileEntreeId, $serviceId, $date) {
+            $entree = $this->entreeVerrouillee($fileEntreeId, $serviceId, $date);
 
             if (! $entree->estAbsent()) {
                 throw new \Exception('Seuls les patients absents peuvent être remis en attente');
@@ -261,6 +273,27 @@ class FileAttenteService
             ->whereDate('date', $date->toDateString())
             ->with(['service', 'rendezVous.medecin'])
             ->first();
+    }
+
+    /**
+     * Récupère et verrouille une entrée en appliquant le périmètre service/date demandé.
+     */
+    private function entreeVerrouillee(
+        int $fileEntreeId,
+        ?int $serviceId,
+        ?CarbonInterface $date
+    ): FileEntree {
+        $query = FileEntree::whereKey($fileEntreeId);
+
+        if ($serviceId !== null) {
+            $query->where('service_id', $serviceId);
+        }
+
+        if ($date !== null) {
+            $query->whereDate('date', Carbon::parse($date)->toDateString());
+        }
+
+        return $query->lockForUpdate()->firstOrFail();
     }
 
     /**
