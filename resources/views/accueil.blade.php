@@ -42,13 +42,6 @@
 
                 <a href="{{ route('login') }}" class="inline-flex min-h-[48px] items-center justify-center rounded-full border-2 border-white bg-[#0F766E] px-7 text-base font-semibold text-white transition-colors hover:bg-[#115E59] motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white max-sm:px-5 max-sm:text-sm">Se connecter</a>
             </div>
-
-            <div class="px-5 sm:hidden">
-                <a href="#comment" class="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-white underline decoration-white/40 underline-offset-4 transition-colors hover:text-[#99F6E4] hover:decoration-[#99F6E4] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white motion-reduce:transition-none sm:hidden">
-                    Comment ça marche
-                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                </a>
-            </div>
         </header>
 
         {{-- Contenu --}}
@@ -76,6 +69,13 @@
                     <span class="text-lg font-semibold">File d'attente</span>
                     <span class="inline-flex h-12 items-center rounded-full bg-[#99F6E4] px-5 text-base font-semibold text-[#0B3B38]">Exemple</span>
                 </div>
+            </div>
+
+            <div class="mt-5 sm:hidden">
+                <a href="#comment" class="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-white underline decoration-white/40 underline-offset-4 transition-colors hover:text-[#99F6E4] hover:decoration-[#99F6E4] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white motion-reduce:transition-none sm:hidden">
+                    Comment ça marche
+                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                </a>
             </div>
 
         </div>
