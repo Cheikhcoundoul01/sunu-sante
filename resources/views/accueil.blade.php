@@ -34,13 +34,20 @@
                         <span class="text-xl font-semibold text-white sm:text-2xl">Sunu Santé</span>
                     </a>
 
-                    <a href="#comment" class="group inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-white/30 bg-[#0B3B38]/90 px-4 py-2 text-sm font-medium text-white underline-offset-4 backdrop-blur-sm transition duration-150 hover:bg-[#99F6E4] hover:text-[#115E59] hover:underline focus-visible:bg-[#99F6E4] focus-visible:text-[#115E59] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white motion-reduce:transition-none sm:text-base">
+                    <a href="#comment" class="group inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-white/30 bg-[#0B3B38]/90 px-4 py-2 text-sm font-medium text-white underline-offset-4 backdrop-blur-sm transition duration-150 hover:bg-[#99F6E4] hover:text-[#115E59] hover:underline focus-visible:bg-[#99F6E4] focus-visible:text-[#115E59] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white motion-reduce:transition-none sm:text-base max-sm:hidden">
                         Comment ça marche
                         <svg class="h-4 w-4 shrink-0 transition-transform duration-150 group-hover:translate-y-0.5 group-focus-visible:translate-y-0.5 motion-reduce:group-hover:translate-y-0 motion-reduce:group-focus-visible:translate-y-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                     </a>
                 </div>
 
-                <a href="{{ route('login') }}" class="inline-flex min-h-[48px] items-center justify-center rounded-full border-2 border-white bg-[#0F766E] px-7 text-base font-semibold text-white transition-colors hover:bg-[#115E59] motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Se connecter</a>
+                <a href="{{ route('login') }}" class="inline-flex min-h-[48px] items-center justify-center rounded-full border-2 border-white bg-[#0F766E] px-7 text-base font-semibold text-white transition-colors hover:bg-[#115E59] motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white max-sm:px-5 max-sm:text-sm">Se connecter</a>
+            </div>
+
+            <div class="px-5 sm:hidden">
+                <a href="#comment" class="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-white underline decoration-white/40 underline-offset-4 transition-colors hover:text-[#99F6E4] hover:decoration-[#99F6E4] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white motion-reduce:transition-none sm:hidden">
+                    Comment ça marche
+                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                </a>
             </div>
         </header>
 
