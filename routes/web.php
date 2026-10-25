@@ -3,6 +3,7 @@
 use App\Http\Controllers\DemoAuthController;
 use App\Http\Controllers\HomeController;
 use App\Livewire\Accueil\FileDuJour;
+use App\Livewire\Admin\JournalActivite as AdminJournalActivite;
 use App\Livewire\Admin\Personnel as AdminPersonnel;
 use App\Livewire\Admin\Services as AdminServices;
 use App\Livewire\Admin\Statistiques as AdminStatistiques;
@@ -172,4 +173,8 @@ Route::middleware(['auth', 'account.active', 'role:Administrateur'])
         Route::middleware('permission:users.gerer')
             ->get('/personnel', AdminPersonnel::class)
             ->name('personnel');
+
+        Route::middleware('can:journal.voir')
+            ->get('/journal', AdminJournalActivite::class)
+            ->name('journal');
     });

@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Http\Middleware\EnsureAccountActive;
+use App\Models\User;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 use Spatie\Permission\Middleware\PermissionMiddleware;
@@ -30,5 +32,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::addPersistentMiddleware(RoleMiddleware::class);
         Livewire::addPersistentMiddleware(PermissionMiddleware::class);
         Livewire::addPersistentMiddleware(RoleOrPermissionMiddleware::class);
+
+        Gate::define('journal.voir', fn (User $user) => $user->hasRole('Administrateur'));
     }
 }

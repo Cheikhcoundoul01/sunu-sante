@@ -2,6 +2,7 @@
     // Les noms viennent de ton route:list. Pour ajouter une page : copie une ligne.
     $liens = [
         ['label' => 'Tableau de bord',       'route' => 'admin.dashboard'],
+        ['label' => 'Journal d\'activité',   'route' => 'admin.journal'],
         ['label' => 'Statistiques',          'route' => 'admin.statistiques'],
         ['label' => 'Gestion des services',  'route' => 'admin.services'],
         ['label' => 'Gestion du personnel',  'route' => 'admin.personnel'],
